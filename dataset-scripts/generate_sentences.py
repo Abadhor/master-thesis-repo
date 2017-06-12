@@ -47,9 +47,9 @@ ns_fulltext = {'xocs':'http://www.elsevier.com/xml/xocs/dtd',
 def getNodeText(node):
   retString = ''
   if node.text != None: 
-    retString += node.text
+    retString += node.text + ' '
   if node.tail != None: 
-    retString += node.tail
+    retString += node.tail + ' '
   for child in node:
     retString += getNodeText(child)
   return retString
