@@ -79,7 +79,8 @@ def readXML(filePath):
   return paras#, domain
 
 def split_sentences(text):
-  text = p.sub('#REF', text)
+  #text = p.sub('#REF', text)
+  text = p.sub('', text)
   return sentence_tokenizer.tokenize(text)
 
 
