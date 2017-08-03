@@ -13,7 +13,9 @@ ABBREV_TYPES = set(['e.g', 'eq', 'eqs', 'etc', 'refs', 'ref', 'fig', 'figs', 'i.
 sentence_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
 #add extra
 sentence_tokenizer._params.abbrev_types.update(ABBREV_TYPES)
-p = re.compile(r'\[[\d\W]*?\]')
+RE_REF = re.compile(r'\[[\d\W]*?\]')
+RE_FIG = re.compile(r'[F|f]igs?\. *\d+')
+RE_OTHERS = re.compile(r'[^a-zA-Z0-9_\-\. ]+')
 
 ns_doc = {'xocs':'http://www.elsevier.com/xml/xocs/dtd',
 'xs':'http://www.w3.org/2001/XMLSchema',
@@ -80,13 +82,17 @@ def readXML(filePath):
 
 def split_sentences(text):
   #text = p.sub('#REF', text)
-  text = p.sub('', text)
+  text = RE_REF.sub('', text)
+  text = RE_FIG.sub('', text)
+  text = RE_OTHERS.sub('', text)
   return sentence_tokenizer.tokenize(text)
 
 
 def writeSentences(sentences, outFile):
   for sent in sentences:
-    outFile.write(sent + '\n')
+    tokens = nltk.word_tokenize(sent)
+    newSent = " ".join(tokens)
+    outFile.write(newSent+'\n')
 
 def writePara(para, outFile):
   first = True

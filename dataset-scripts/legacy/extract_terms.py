@@ -15,7 +15,8 @@ MIN_AVERAGE_CHARS_PER_WORD = 2
 number_of_tokens = 0
 number_of_files = 0
 
-tknzr = TweetTokenizer()
+#TweetTokenizer to handle non-alphabetic characters better
+#tknzr = TweetTokenizer()
 #grammar from the c-value paper
 grammar_original = r"""
     NP: {(<ADJ|NOUN>+|(<ADJ|NOUN>*<ADP>?)<ADJ|NOUN>*)<NOUN>}
@@ -48,10 +49,11 @@ def tagFile(filePath, candidateDict):
   infile = io.open(filePath, 'r', encoding='utf8')
   number_of_files += 1
   for line in infile:
-    line_tokens = tknzr.tokenize(line)
+    #line_tokens = tknzr.tokenize(line)
+    line_tokens = nltk.word_tokenize(line)
     number_of_tokens += len(line_tokens)
-    print("Tokens: ",number_of_tokens)
-    print("File: ",number_of_files, end='\033[1A\r')
+    #print("Tokens: ",number_of_tokens)
+    print("File: ",number_of_files, end='\r')
     if len(line_tokens) == 0:
       continue
     sent = nltk.pos_tag(line_tokens, tagset='universal')
@@ -124,10 +126,12 @@ candidate_counts = {}
 for idx, candidate in enumerate(candidateDict_items_filtered):
   print(idx, '/', len(candidateDict_items_filtered), end='\r')
   freq = candidate['freq']
-  for previous in candidateDict_items:
+  #for previous in candidateDict_items:
+  for previous in candidateDict_items_filtered:
     if previous['length'] <= candidate['length']:
       break
-    if isInList(candidate['list'], previous['list']):
+    #if isInList(candidate['list'], previous['list']):
+    if candidate['name'] in previous['name']:
       freq += previous['freq']
   candidate_counts[candidate['name']] = freq
 
