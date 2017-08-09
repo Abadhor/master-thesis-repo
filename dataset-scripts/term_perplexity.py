@@ -1,17 +1,6 @@
-import io
-import os
+
 import nltk
 import math
-from operator import itemgetter
-from nltk.tokenize import TweetTokenizer
-from collections import Counter
-
-DATA_FOLDER = "D:\\Uni\\MasterThesis\\Data\\SemEval2017_AutomaticKeyphraseExtraction\\scienceie2017_train\\train2_modified\\"
-OUT_FOLDER_KWDS = "D:\\Uni\\MasterThesis\\Data\\SemEval2017_AutomaticKeyphraseExtraction\\scienceie2017_train\\train2_keywords\\"
-
-def writeCountedList(counted, outFile):
-  for c in sorted(list(counted.keys())):
-    outFile.write(c + '\t' + str(counted[c]) + '\n')
 
 class Word:
   
@@ -35,16 +24,18 @@ class Word:
 
 class Perplexity:
   
-  def __init__(self):
+  def __init__(self, text_files, debug=False):
+    """Requires a dictionary of file names with corresponding sentences"""
+    self.debug = debug
     self.dictionary = {}
+    self.loadSentences(text_files)
+    self.calculateEntropies()
   
-  def loadFile(self, filePath):
+  def addFile(self, file):
     """update frequencies in dictonary"""
     #TweetTokenizer to handle non-alphabetic characters better
-    tknzr = TweetTokenizer()
-    infile = io.open(filePath, 'r', encoding='utf8')
-    for line in infile:
-      line_tokens = tknzr.tokenize(line)
+    for line in file:
+      line_tokens = nltk.word_tokenize(line)
       if len(line_tokens) == 0:
         continue
       for idx,token in enumerate(line_tokens):
@@ -64,13 +55,15 @@ class Perplexity:
             self.dictionary[token].r[r] = 1
           else:
             self.dictionary[token].r[r] += 1
-    infile.close()
   
   def calculateEntropies(self):
     keys = self.dictionary.keys()
     for idx, word in enumerate(keys):
-      print(idx, '/', len(keys), end='\r')
+      if self.debug:
+        print(idx+1, '/', len(keys), end='\r')
       self.dictionary[word].calculateEntropies()
+    if self.debug:
+      print()
   
   def calculateLogPerplexity(self, tokens):
     """calculate the log_2 perplexity of a multi word unit"""
@@ -83,10 +76,8 @@ class Perplexity:
     log_pp = sum / (2*len(tokens))
     return log_pp
   
-  def loadFolder(self, folderName, extension='sents'):
-    fileList = os.listdir(folderName)
-    for fname in fileList:
-      if fname[len(fname)-len(extension):] == extension:
-        self.loadFile(folderName + fname)
-    self.calculateEntropies()
+  def loadSentences(self, text_files):
+    for fname in text_files.keys():
+      self.addFile(text_files[fname])
+    
 

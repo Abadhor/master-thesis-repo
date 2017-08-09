@@ -10,7 +10,7 @@ from KeywordDataset import KeywordDataset
 class SemEval2017Dataset(KeywordDataset):
   
   def __init__(self):
-    self.ABBREV_TYPES = set(['e.g', 'eq', 'eqs', 'etc', 'refs', 'ref', 'fig', 'figs', 'i.e', 'al', 'inc', 'sec', 'cf', 'i.v'])
+    self.ABBREV_TYPES = set(['e.g', 'eq', 'eqs', 'etc', 'refs', 'ref', 'fig', 'figs', 'i.e', 'al', 'inc', 'sec', 'cf', 'i.v', 'adapt'])
     self.sentence_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
     #add extra
     self.sentence_tokenizer._params.abbrev_types.update(self.ABBREV_TYPES)
@@ -79,23 +79,28 @@ class SemEval2017Dataset(KeywordDataset):
       self.keywords.add(kw)
     infile.close()
   
-  def extractSentencesFromXML(self, folder, ext='xml', debug=False):
+  def extractSentences(self, folder, ext, xml=False, verbose=False):
     """Extract Sentences from xml files in folder with specified extension"""
     self.text_files = dict()
     fileList = os.listdir(folder)
     f_fileList = [fname for fname in fileList if fname[len(fname)-len(ext):] == ext]
     for idx, fname in enumerate(f_fileList):
-      if debug:
+      if verbose:
         print("File:",idx+1, '/', len(f_fileList), end='\r')
       key = fname[:len(fname)-(len(ext)+1)]
       file_sentences = []
-      paras = self.extractXMLfromFile(folder + fname)
+      if xml:
+        paras = self.extractXMLfromFile(folder + fname)
+      else:
+        paras = self.extractFromText(folder + fname)
       for para in paras:
         sents = self.split_sentences(para)
         file_sentences.extend(sents)
         for i in range(0, len(file_sentences)):
           file_sentences[i] = file_sentences[i].strip()
       self.text_files[key] = file_sentences
+    if verbose:
+      print()
   
   def dumpSentences(self, folder, ext):
     """Dump split sentences to files"""
@@ -164,6 +169,13 @@ class SemEval2017Dataset(KeywordDataset):
     text = self.RE_FIG.sub('', text)
     #text = self.RE_OTHERS.sub('', text)
     return self.sentence_tokenizer.tokenize(text)
+  
+  def extractFromText(self, filePath):
+    with io.open(filePath, 'r', encoding='utf8') as infile:
+      para = []
+      for line in infile:
+        para.append(line)
+      return para
   
   def filterUnigramKeywords(self):
     self.keywords = {x for x in self.keywords if len(nltk.word_tokenize(x)) >= 2}
