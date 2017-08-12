@@ -3,6 +3,7 @@ from BaselineFeatures import BaselineFeatures
 from sklearn import svm
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, classification_report
 import numpy as np
+import matplotlib.pyplot as plt
 
 DATA_FOLDER = "D:\\Uni\\MasterThesis\\Data\\SemEval2017_AutomaticKeyphraseExtraction\\scienceie2017_train\\train2\\"
 OUT_FOLDER = "D:\\Uni\\MasterThesis\\Data\\SemEval2017_AutomaticKeyphraseExtraction\\scienceie2017_train\\train2_modified\\"
@@ -17,11 +18,11 @@ def getBaselineFeatures(folder, addKeywords, verbose=False):
   
   ds.extractKeywords(folder, "ann")
   ds.filterUnigramKeywords()
-  #ds.dumpKeywords(OUT_FOLDER_KWDS, "keywords")
+  ds.dumpKeywords(OUT_FOLDER_KWDS, "keywords")
   
   #ds.extractSentences(folder, "xml", xml=True, verbose=verbose)
   ds.extractSentences(folder, "txt", xml=False, verbose=verbose)
-  #ds.dumpSentences(OUT_FOLDER, "sents")
+  ds.dumpSentences(OUT_FOLDER, "sents")
   
   baseline = BaselineFeatures(ds, addKeywords=addKeywords)
   print("Tagging...")
@@ -61,18 +62,40 @@ def getBaselineFeatures(folder, addKeywords, verbose=False):
   print("Calculating Statistical Features...")
   baseline.calculateStatFeatures(candidates, verbose=verbose)
   
-  norm = ['TF', 'IDF']
-  baseline.normalizeFeatures(candidates, norm)
-  attrs = ['length', 'TF', 'IDF', 'c_value', 'log_pp', 't_score', 'pmi', 'dice']
-  #baseline.exportARFF(candidates, attrs, "baseline", OUT_FOLDER_FEATURES, "baseline.arff")
-  
-  return baseline.asNumpy(candidates, attrs)
+  return baseline, candidates
 
-features_train, labels_train = getBaselineFeatures(DATA_FOLDER, addKeywords=True, verbose=True)
+def plotAttr(X,y, plotAttr, attrs):
+  h = .02  # step size in the mesh
+  plt.subplots_adjust(wspace=0.4, hspace=0.4)
+  for i in range(0,len(attrs)):
+    plt.subplot(len(attrs)/2,2,i+1)
+    # Plot the data points
+    plt.scatter(X[:,plotAttr], X[:,i],c=y, cmap=plt.cm.coolwarm)
+    plt.xlabel(attrs[plotAttr])
+    plt.ylabel(attrs[i])
+  plt.show()
+
+#TRAIN
+baseline, candidates = getBaselineFeatures(DATA_FOLDER, addKeywords=True, verbose=True)
+norm = ['TF', 'IDF']
+baseline.normalizeFeatures(candidates, norm)
+attrs = ['length', 'TF', 'IDF', 'c_value', 'log_pp', 't_score', 'pmi', 'dice']
+#baseline.exportARFF(candidates, attrs, "baseline", OUT_FOLDER_FEATURES, "baseline.arff")
+features_train, labels_train = baseline.asNumpy(candidates, attrs)
 np.savetxt(OUT_FOLDER_FEATURES + "train.npy", features_train, fmt='%10.5f',delimiter=',')
-features_test, labels_test = getBaselineFeatures(TEST_FOLDER, addKeywords=False, verbose=True)
+
+#TEST
+baseline2, candidates2 = getBaselineFeatures(TEST_FOLDER, addKeywords=False, verbose=True)
+norm = ['TF', 'IDF']
+baseline2.normalizeFeatures(candidates2, norm)
+attrs = ['length', 'TF', 'IDF', 'c_value', 'log_pp', 't_score', 'pmi', 'dice']
+features_test, labels_test = baseline2.asNumpy(candidates2, attrs)
+
 np.savetxt(OUT_FOLDER_FEATURES + "test.npy", features_test, fmt='%10.5f', delimiter=',')
-clf = svm.SVC()
+
+#Classify
+class_weights = {0:1.0, 1:1.5}
+clf = svm.SVC(class_weight=class_weights)
 clf.fit(features_train, labels_train)
 
 pred = clf.predict(features_test)
@@ -80,8 +103,9 @@ acc = accuracy_score(labels_test , pred)
 conf = confusion_matrix(labels_test , pred, labels=[1,0])
 print(conf)
 print(classification_report(labels_test , pred, labels=[1,0], target_names=['yes','no']))
-#prec = precision_score(labels_test, pred, average=None)
-#recall = recall_score(labels_test, pred, average=None)
+#plotAttr(features_train, labels_train, 0, attrs)
+prec = precision_score(labels_test, pred, average=None)
+recall = recall_score(labels_test, pred, average=None)
 
 #DEBUG
 if not DEBUG:

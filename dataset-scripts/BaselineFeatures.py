@@ -5,6 +5,7 @@ import numpy as np
 from operator import attrgetter
 from term_perplexity import Perplexity
 from StatFeatures import StatFeatures
+from nltk.stem import WordNetLemmatizer
 
 class Candidate:
   
@@ -41,6 +42,10 @@ class BaselineFeatures:
     self.dictionary = dataset.getDictionary()
     self.statFeatures = StatFeatures(self.dictionary)
     self.addKeywords = addKeywords
+    #lemmatize keywords
+    wn = WordNetLemmatizer()
+    self.ds_keywords = [ nltk.word_tokenize(x) for x in self.ds_keywords ]
+    self.ds_keywords = { " ".join([wn.lemmatize(y.strip()) for y in x]) for x in self.ds_keywords }
   
   def calculateStatistics(self, candidates):
     true_positive = 0
@@ -62,6 +67,7 @@ class BaselineFeatures:
   
   def extractNounPhrases(self, verbose=False):
     """Create a list of candidates from the dataset by extracting the longest NPs."""
+    wn = WordNetLemmatizer()
     grammar_improved = r"""
         NP: {((<ADJ|NOUN>+<ADP>)+<ADJ|NOUN>*)<NOUN>}
         NP: {<ADJ|NOUN>+<NOUN>}
@@ -75,7 +81,9 @@ class BaselineFeatures:
       file_sents = []
       for line in file:
         line_tokens = nltk.word_tokenize(line)
-        file_sents.append(" ".join(line_tokens))
+        #dont lemmatize line_tokens used for PoS tagging
+        file_sents.append(" ".join([ wn.lemmatize(x.strip()) for x in line_tokens]))
+        #file_sents.append(" ".join(line_tokens))
         if len(line_tokens) == 0:
           continue
         sent = nltk.pos_tag(line_tokens, tagset='universal')
@@ -86,6 +94,8 @@ class BaselineFeatures:
             term_candidate = []
             for tuple in list(node):
               term_candidate.append(tuple[0])
+            #lemmatize each token
+            term_candidate = [ wn.lemmatize(x.strip()) for x in term_candidate]
             candidateString = " ".join(term_candidate)
             if candidateString in candidateDict:
               candidateDict[candidateString] = (candidateDict[candidateString][0],candidateDict[candidateString][1]+1)
@@ -135,7 +145,7 @@ class BaselineFeatures:
     #process only longer candidates, then break
     for idx, candidate in enumerate(candidates):
       if verbose:
-        print(idx, '/', len(candidates), end='\r')
+        print(idx+1, '/', len(candidates), end='\r')
       candidate.NPFrequency = candidate.freq
       #for previous in candidateDict_items:
       for previous in candidates:
@@ -151,7 +161,7 @@ class BaselineFeatures:
     #process only longer candidates, then break
     for idx, candidate in enumerate(candidates):
       if verbose:
-        print(idx, '/', len(candidates), end='\r')
+        print(idx+1, '/', len(candidates), end='\r')
       candidate.TF = 0
       DF = 0
       for fkey in self.tokenized_files.keys():
@@ -179,7 +189,7 @@ class BaselineFeatures:
     """Requires total frequencies"""
     for idx, candidate in enumerate(candidates):
       if verbose:
-        print(idx, '/', len(candidates), end='\r')
+        print(idx+1, '/', len(candidates), end='\r')
       candidate.nested_count = 0
       candidate.nested_freq = 0
       for previous in candidates:
