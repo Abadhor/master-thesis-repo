@@ -17,6 +17,7 @@ class Candidate:
     self.NPFrequency = None
     self.TF = None
     self.IDF = None
+    self.DF = None
     self.nested_count = None
     self.nested_freq = None
     self.c_value = None
@@ -47,12 +48,12 @@ class BaselineFeatures:
     self.ds_keywords = [ nltk.word_tokenize(x) for x in self.ds_keywords ]
     self.ds_keywords = { " ".join([wn.lemmatize(y.strip()) for y in x]) for x in self.ds_keywords }
   
-  def calculateStatistics(self, candidates):
+  def calculateStatistics(self, candidates, names_set):
     true_positive = 0
     for c in candidates:
-      if c.name in self.ds_keywords:
+      if c.name in names_set:
         true_positive += 1
-    positive = len(self.ds_keywords)
+    positive = len(names_set)
     detected_positive = len(candidates) #true + false positive
     s = Statistics()
     s.precision = true_positive / detected_positive
@@ -61,18 +62,83 @@ class BaselineFeatures:
     return s
   
   def normalizeFeatures(self, candidates, attrs):
+    """Replace selected attributes with themselves divided by the number of files in dataset"""
     for candidate in candidates:
       for attr in attrs:
         setattr(candidate, attr, attrgetter(attr)(candidate)/len(self.ds_text_files))
   
+  def logFeatures(self, candidates, attrs, base=2):
+    """Replace selected attributes with the log_base of themselves"""
+    for candidate in candidates:
+      for attr in attrs:
+        setattr(candidate, attr, math.log(attrgetter(attr)(candidate),base))
+  
+  def getAllNGramms(self, line_tokens, min_length, max_length):
+    nGramms = []
+    for l in range(min_length,max_length+1):
+      if l > len(line_tokens):
+        break
+      for i in range(0, len(line_tokens) - l + 1):
+        nGramms.append(line_tokens[i:i+l])
+    return nGramms
+  
+  def extractNGramms(self, min_length=2, max_length=2, verbose=False):
+    """Create a list of n-gramms that may be used as term candidates from the dataset."""
+    if min_length > max_length:
+      max_length = min_length
+    wn = WordNetLemmatizer()
+    #tokenized and then joined by spaces
+    self.tokenized_files = {}
+    #dict of n-gramms
+    NGrammDict = {}
+    for idx, fname in enumerate(self.ds_text_files.keys()):
+      if verbose:
+        print("File:", idx+1, '/', len(self.ds_text_files.keys()), end='\r')
+      file = self.ds_text_files[fname]
+      file_sents = []
+      #has the 
+      doc_ngramms = set()
+      for line in file:
+        line_tokens = nltk.word_tokenize(line)
+        line_tokens = [ wn.lemmatize(x.strip()) for x in line_tokens]
+        file_sents.append(" ".join(line_tokens))
+        if len(line_tokens) == 0:
+          continue
+        line_NGramms = self.getAllNGramms(line_tokens, min_length, max_length)
+        for ng in line_NGramms:
+          ng_string = " ".join(ng)
+          if ng_string not in NGrammDict:
+            c = Candidate()
+            c.name = ng_string
+            c.list = ng
+            c.length = len(ng)
+            c.freq = 1
+            c.TF = 1
+            c.DF = 1
+            NGrammDict[ng_string] = c
+          else:
+            NGrammDict[ng_string].freq += 1
+            NGrammDict[ng_string].TF += 1
+            if ng_string not in doc_ngramms:
+              NGrammDict[ng_string].DF += 1
+              doc_ngramms.add(ng_string)
+      self.tokenized_files[fname] = file_sents
+    if verbose:
+      print()
+    NGrammLS = list(NGrammDict.values())
+    for c in NGrammLS:
+      c.IDF = len(self.ds_text_files)/c.DF
+    return NGrammLS
+    
+  
   def extractNounPhrases(self, verbose=False):
-    """Create a list of candidates from the dataset by extracting the longest NPs."""
+    """Create a list of noun phrases that may be used as term candidates from the dataset by extracting the longest NPs."""
     wn = WordNetLemmatizer()
     grammar_improved = r"""
         NP: {((<ADJ|NOUN>+<ADP>)+<ADJ|NOUN>*)<NOUN>}
         NP: {<ADJ|NOUN>+<NOUN>}
     """
-    candidateDict = {}
+    NPDict = {}
     self.tokenized_files = {}
     for idx, fname in enumerate(self.ds_text_files.keys()):
       if verbose:
@@ -91,36 +157,36 @@ class BaselineFeatures:
         tree = cp.parse(sent)
         for node in tree:
           if type(node) is nltk.tree.Tree:
-            term_candidate = []
+            NP = []
             for tuple in list(node):
-              term_candidate.append(tuple[0])
+              NP.append(tuple[0])
             #lemmatize each token
-            term_candidate = [ wn.lemmatize(x.strip()) for x in term_candidate]
-            candidateString = " ".join(term_candidate)
-            if candidateString in candidateDict:
-              candidateDict[candidateString] = (candidateDict[candidateString][0],candidateDict[candidateString][1]+1)
+            NP = [ wn.lemmatize(x.strip()) for x in NP]
+            NPString = " ".join(NP)
+            if NPString in NPDict:
+              NPDict[NPString] = (NPDict[NPString][0],NPDict[NPString][1]+1)
             else:
-              candidateDict[candidateString] = (term_candidate, 1)
+              NPDict[NPString] = (NP, 1)
       self.tokenized_files[fname] = file_sents
-    #add keywords to candidates on demand
+    #add keywords to Noun Phrases on demand
     if self.addKeywords:
       for kwd in self.ds_keywords:
-        if kwd in candidateDict:
+        if kwd in NPDict:
           continue
-        term_candidate = nltk.word_tokenize(kwd)
-        candidateDict[kwd] = (term_candidate, 1)
+        NP = nltk.word_tokenize(kwd)
+        NPDict[kwd] = (NP, 1)
     #convert to candidate objects
-    candidates = []
-    for item in candidateDict.items():
+    noun_phrases = []
+    for item in NPDict.items():
       c = Candidate()
       c.name = item[0]
       c.list = item[1][0]
       c.length = len(item[1][0])
       c.freq = item[1][1]
-      candidates.append(c)
+      noun_phrases.append(c)
     if verbose:
       print()
-    return candidates
+    return noun_phrases
   
   def sortCandidates(self, candidates):
     """Sort candidates by length (number of tokens) and by name if same length"""
@@ -239,7 +305,7 @@ class BaselineFeatures:
         else:
           outfile.write("no\n")
   
-  def asNumpy(self, candidates, attrs):
+  def asNumpy(self, candidates, gt_names, attrs):
     """Convert candidate features and keywords into numpy matrices, whereas each  candidate is represented by a row and each feature by a column."""
     X = []
     y = []
@@ -248,7 +314,7 @@ class BaselineFeatures:
       for attr in attrs:
         row.append(attrgetter(attr)(candidate))
       X.append(row)
-      if candidate.name in self.ds_keywords:
+      if candidate.name in gt_names:
         y.append(1)
       else:
         y.append(0)
