@@ -198,7 +198,7 @@ param_grid_MLP = [
   }
 ]
 k = 5
-print("Support Vector Classifier Grid Search with ",k,"-fold cross validation")
+print("Multi Layer Perceptron Classifier Grid Search with ",k,"-fold cross validation")
 #clf = GridSearchCV(svm.SVC(), param_grid, cv=k,scoring=score, verbose=2)
 clf = GridSearchCV(MLPClassifier(), param_grid_MLP, cv=k,scoring=score, verbose=2)
 #clf = svm.SVC(class_weight=class_weights)

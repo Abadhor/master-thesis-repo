@@ -1,0 +1,89 @@
+
+import random
+import numpy as np
+import io
+import pickle
+
+random.seed(5)
+
+PATH = "./data/"
+TEST = "test_seq_data.pickle"
+TRAIN = "train_seq_data.pickle"
+
+WORDS = ['a','b','c','d','e','f','g']
+CLASS_OUTSIDE = 'O'
+CLASS_VALID = 'X'
+CLASS_INVALID = 'I'
+LABELS = [CLASS_OUTSIDE, CLASS_VALID, CLASS_INVALID]
+
+SPECIAL = 'X'
+MOD = 'M'
+SENT_NUM = 10000
+SENT_MAX_LEN = 10
+SENT_MIN_LEN = 5
+TEST_RATIO = 0.1
+
+DICT = WORDS.copy()
+DICT.append(SPECIAL)
+DICT.append(MOD)
+
+
+def createSentence(length):
+  sent = []
+  for i in range(0,length):
+    sent.append(random.choice(WORDS))
+  sent[random.randrange(0,length)] = MOD
+  sent[random.randrange(0,length)] = SPECIAL
+  return sent
+
+def createAnnotation(sent):
+  """If there is a MOD in the sentence before SPECIAL, SPECIAL is valid.
+  Otherwise SPECIAL is invalid"""
+  flag = False
+  ann = []
+  for w in sent:
+    if w in WORDS:
+      ann.append(CLASS_OUTSIDE)
+    if w == MOD:
+      flag = True
+      ann.append(CLASS_OUTSIDE)
+    if w == SPECIAL:
+      if flag:
+        ann.append(CLASS_VALID)
+      else:
+        ann.append(CLASS_INVALID)
+  return ann
+
+def encode(ls):
+  data = np.zeros((len(ls),SENT_MAX_LEN, len(DICT)))
+  labels = np.zeros((len(ls),SENT_MAX_LEN, len(LABELS)))
+  for s_idx in range(0,len(ls)):
+    s = ls[s_idx][0]
+    a = ls[s_idx][1]
+    s_len = len(s)
+    for w_idx in range(0,s_len):
+      dict_idx = DICT.index(s[w_idx])
+      labels_idx = LABELS.index(a[w_idx])
+      data[s_idx,w_idx,dict_idx] = 1
+      labels[s_idx,w_idx,labels_idx] = 1
+  return data, labels
+
+test = []
+for i in range(0, int(SENT_NUM*TEST_RATIO)):
+  s = createSentence(random.randrange(SENT_MIN_LEN, SENT_MAX_LEN))
+  a = createAnnotation(s)
+  test.append((s,a))
+
+train = []
+for i in range(0, int(SENT_NUM*(1-TEST_RATIO))):
+  s = createSentence(random.randrange(SENT_MIN_LEN, SENT_MAX_LEN))
+  a = createAnnotation(s)
+  train.append((s,a))
+
+data, labels = encode(test)
+with io.open(PATH+TEST, "wb") as fp:
+  pickle.dump({"data":data, "labels":labels}, fp)
+data, labels = encode(train)
+with io.open(PATH+TRAIN, "wb") as fp:
+  pickle.dump({"data":data, "labels":labels}, fp)
+
