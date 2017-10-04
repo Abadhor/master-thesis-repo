@@ -70,20 +70,20 @@ def encode(ls):
 
 test = []
 for i in range(0, int(SENT_NUM*TEST_RATIO)):
-  s = createSentence(random.randrange(SENT_MIN_LEN, SENT_MAX_LEN))
+  s = createSentence(random.randrange(SENT_MIN_LEN, SENT_MAX_LEN+1))
   a = createAnnotation(s)
   test.append((s,a))
 
 train = []
 for i in range(0, int(SENT_NUM*(1-TEST_RATIO))):
-  s = createSentence(random.randrange(SENT_MIN_LEN, SENT_MAX_LEN))
+  s = createSentence(random.randrange(SENT_MIN_LEN, SENT_MAX_LEN+1))
   a = createAnnotation(s)
   train.append((s,a))
 
 data, labels = encode(test)
 with io.open(PATH+TEST, "wb") as fp:
-  pickle.dump({"data":data, "labels":labels}, fp)
+  pickle.dump({"data":data, "labels":labels, "dictionary":DICT, "label_names":LABELS}, fp)
 data, labels = encode(train)
 with io.open(PATH+TRAIN, "wb") as fp:
-  pickle.dump({"data":data, "labels":labels}, fp)
+  pickle.dump({"data":data, "labels":labels, "dictionary":DICT, "label_names":LABELS}, fp)
 

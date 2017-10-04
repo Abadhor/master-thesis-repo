@@ -20,7 +20,6 @@ sentences = tf.placeholder(tf.float32, [None, sent_length, 3])
 
 labels = tf.placeholder(tf.float32, [None, sent_length, 2])
 
-
 W = tf.constant([[[1,0,0],[0,0,1]]], dtype=tf.float32)
 cur_batch_size = tf.shape(sentences)[0]
 W = tf.tile(W, multiples=[cur_batch_size,1,1])
@@ -31,9 +30,9 @@ res = tf.transpose(tf.matmul(W, tf.transpose(sentences, perm=[0,2,1])),perm=[0,2
 correct_prediction = tf.equal(tf.argmax(res,2), tf.argmax(labels,2))
 sent_sum = tf.reduce_sum(tf.cast(correct_prediction, tf.float32),1)
 correct_sent = tf.equal(sent_sum, tf.cast(tf.shape(correct_prediction[1]), tf.float32))
-loss = accuracy =  tf.reduce_mean(tf.cast(correct_sent, tf.float32))
+#loss = accuracy =  tf.reduce_mean(tf.cast(correct_sent, tf.float32))
 
-#loss = tf.nn.softmax_cross_entropy_with_logits(logits=res, labels=labels)
+loss = tf.nn.softmax_cross_entropy_with_logits(logits=res, labels=labels)
 
 #loss = tf.reduce_sum(loss, 1)
 
@@ -41,10 +40,28 @@ loss = accuracy =  tf.reduce_mean(tf.cast(correct_sent, tf.float32))
 
 #loss = tf.reduce_mean(loss)
 
-batch_sent = np.array([[[100,0,0],[0,0,100]],[[0,0,1],[0,0,1]]])
+batch_sent = np.array([
+                        [[100,0,0],[0,0,100]],
+                        [[0,0,1],[0,0,1]],
+                        [[0,0,0],[0,0,0]]
+                        ])
 
-batch_labels = np.array([[[0,1],[0,1]],[[0,1],[0,1]]])
+batch_labels = np.array([
+                        [[0,1],[0,1]],
+                        [[0,1],[0,1]],
+                        [[0,0],[0,0]]
+                        ])
 
+indices = tf.constant([[0, 0], [1, 1]], tf.int64)
+
+mask = tf.reduce_max(sentences, 2)
+
+#params = tf.constant([['a', 'b'], ['c', 'd']], tf.string)
+#params = tf.constant(['a', 'b', 'c', 'd'], tf.string)
+
+#g = tf.gather(params, indices)
+
+#print(session.run(g))
 
 data = {sentences: batch_sent, labels: batch_labels}
 

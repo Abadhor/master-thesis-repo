@@ -3,6 +3,9 @@ import math
 import pickle
 import numpy as np
 import io
+import random
+
+random.seed(10)
 
 # data path
 PATH = "./data/"
@@ -16,7 +19,28 @@ vocab_size = 9
 num_classes = 3
 batch_size = 128
 LSTM_layer_count = 1
+num_epochs = 100
 
+# load data
+with io.open(PATH+TRAIN, "rb") as fp:
+  train = pickle.load(fp)
+
+train_data = train['data']
+train_labels = train['labels']
+
+with io.open(PATH+TEST, "rb") as fp:
+  test = pickle.load(fp)
+
+test_data = test['data']
+test_labels = test['labels']
+
+# define the number of batches
+num_batches = len(train_data) // batch_size
+if len(train_data) % batch_size == 0:
+  batch_size_last = batch_size
+else:
+  batch_size_last = len(train_data) - (num_batches * batch_size)
+  num_batches += 1
 
 # create a session variable that we can run later.
 session = tf.Session()
@@ -41,6 +65,16 @@ sentences = tf.placeholder(tf.float32, [None, sent_length, vocab_size])
 # to deal with variable batch sizes
 labels = tf.placeholder(tf.float32, [None, sent_length, num_classes])
 
+# mask that indicates the length of the sentence
+# each padded position after the last word is equal to 0
+# all others are equal to 1
+seq_len_mask = tf.reduce_max(labels, 2)
+
+# placeholder for the dictionary
+dictionary = tf.placeholder(tf.string, [vocab_size])
+
+# placeholder for the label_names
+label_names = tf.placeholder(tf.string, [num_classes])
 
 # create LSTM Cells using BasicLSTMCell.  Note that this creates a *layer* of
 # LSTM cells, not just a single one.
@@ -89,14 +123,28 @@ loss = tf.reduce_sum(loss, axis=1)
 loss = tf.reduce_mean(loss)
 
 # calculate accuracy of word class predictions
-correct_prediction = tf.equal(tf.argmax(classes,2), tf.argmax(labels,2))
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+sent_decoded = tf.argmax(sentences,2)
+pred_classes = tf.argmax(classes,2)
+true_classes = tf.argmax(labels,2)
+correct_prediction = tf.cast(tf.equal(pred_classes, true_classes), tf.float32)
+# ensure that results outside the sequence length are 0
+correct_prediction = tf.multiply(correct_prediction, seq_len_mask)
+# calculate accuracy only for the part in the sequence
+# that is part of the sentence
+sent_sum = tf.reduce_sum(correct_prediction,1)
+mask_sum = tf.reduce_sum(seq_len_mask, 1)
+accuracy = tf.reduce_mean(sent_sum / mask_sum)
 
 # calculate fraction of sentences in which each word has been predicted correctly
-sent_sum = tf.reduce_sum(tf.cast(correct_prediction, tf.float32),1)
-correct_sent = tf.equal(sent_sum, tf.cast(tf.shape(correct_prediction[1]), tf.float32))
-sentence_accuracy = tf.reduce_mean(tf.cast(correct_sent, tf.float32))
-#sh = tf.shape(loss)
+correct_sent = tf.cast(tf.equal(sent_sum, mask_sum), tf.float32)
+sentence_accuracy = tf.reduce_mean(correct_sent)
+
+
+# decode sentences into readable words and labels
+sent_decoded = tf.gather(dictionary, sent_decoded)
+pred_classes = tf.gather(label_names, pred_classes)
+true_classes = tf.gather(label_names, true_classes)
+
 
 '''Define the operation that specifies the AdamOptimizer and tells
    it to minimize the loss.''';
@@ -105,56 +153,62 @@ train_step = tf.train.AdamOptimizer().minimize(loss)
 # initialize any variables
 tf.global_variables_initializer().run(session=session)
 
-
-# load data
-with io.open(PATH+TRAIN, "rb") as fp:
-  train = pickle.load(fp)
-
-train_data = train['data']
-train_labels = train['labels']
-
-with io.open(PATH+TEST, "rb") as fp:
-  test = pickle.load(fp)
-
-# create batches
-num_batches = len(train_data) // batch_size
-if len(train_data) % batch_size == 0:
-  batch_size_last = batch_size
-else:
-  batch_size_last = len(train_data) - (num_batches * batch_size)
-  num_batches += 1
+# create batches, randomizing the order of the samples
+def createBatches(data, labels, num_batches, batch_size_last):
+  batches_sent = []
+  batches_labels = []
+  b_idx = [x for x in range(0,len(data))]
+  random.shuffle(b_idx)
+  offset = 0
+  for b in range(0, num_batches-1):
+    cur_b_idx = b_idx[offset:(offset+batch_size)]
+    batches_sent.append([data[x] for x in cur_b_idx])
+    batches_labels.append([labels[x] for x in cur_b_idx])
+    offset += batch_size
   
+  cur_b_idx = b_idx[offset:(offset+batch_size_last)]
+  batches_sent.append([data[x] for x in cur_b_idx])
+  batches_labels.append([labels[x] for x in cur_b_idx])
+  return batches_sent, batches_labels
 
-batches_sent = []
-batches_labels = []
-offset = 0
-for b in range(0, num_batches-1):
-  batches_sent.append(train_data[offset:(offset+batch_size)])
-  batches_labels.append(train_labels[offset:(offset+batch_size)])
-  offset += batch_size
+def printSent(sent, mask, pred, true):
+  sent = np.vectorize(bytes.decode)(sent)
+  pred = np.vectorize(bytes.decode)(pred)
+  true = np.vectorize(bytes.decode)(true)
+  print("Sent: "," ".join(sent))
+  print("Mask: "," ".join([str(int(x)) for x in mask]))
+  print("Pred: "," ".join(pred))
+  print("True: "," ".join(true))
 
-batches_sent.append(train_data[offset:(offset+batch_size_last)])
-batches_labels.append(train_labels[offset:(offset+batch_size_last)])
-
-#data = {sentences:train['data'], labels:train['labels'] }
-#print(session.run(sh, feed_dict=data))
+#data = {sentences:train['data'][0:2,:,:], labels:train['labels'][0:2,:,:], dictionary:train['dictionary'], label_names:train['label_names'] }
+#x, a1,a2,a3 = session.run([accuracy, sent_decoded,pred_classes,true_classes], feed_dict=data)
+#print(x)
+#printSent(a1[0],a2[0],a3[0])
+#exit()
 
 # we'll train with batches of size 128.  This means that we run 
 # our model on 128 examples and then do gradient descent based on the loss
 # over those 128 examples.
-num_steps = 1000
-num_epochs = 100
 step = 0
 
 for ep in range(0,num_epochs):
+  batches_sent, batches_labels = createBatches(train_data, train_labels, num_batches, batch_size_last)
   for b in range(0,num_batches):
-    data = {sentences: batches_sent[b], labels: batches_labels[b]}
-    _, loss_value_train, accuracy_value_train = session.run([train_step, loss, accuracy], feed_dict=data)
-    if (step % 50 == 0):
+    data = {sentences: batches_sent[b], labels: batches_labels[b], dictionary:train['dictionary'], label_names:train['label_names']}
+    _, loss_value_train, accuracy_value_train, sentence_accuracy_value_train, a1, a2, a3, a4 = session.run([train_step, loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask, pred_classes,true_classes], feed_dict=data)
+    if (step % 50000 == 0):
       print("Minibatch train loss at step", step, ":", loss_value_train)
       print("Minibatch accuracy: {:.3%}".format(accuracy_value_train))
-      #print(str(accuracy_value_train))
+      print("Devset sentence accuracy: {:.3%}".format(sentence_accuracy_value_train))
+      printSent(a1[0],a2[0],a3[0],a4[0])
     step += 1
+  # validation on dev set
+  data_testing = {sentences: test_data, labels: test_labels}
+  loss_value_dev, accuracy_value_dev, sentence_accuracy_value_dev, a1, a2, a3, a4 = session.run([loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask,pred_classes,true_classes], feed_dict=data)
+  print("Devset loss at Epoch", ep, ":", loss_value_dev)
+  print("Devset accuracy: {:.3%}".format(accuracy_value_dev))
+  print("Devset sentence accuracy: {:.3%}".format(sentence_accuracy_value_dev))
+  printSent(a1[0],a2[0],a3[0],a4[0])
 
 """
 for step in range(num_steps):
