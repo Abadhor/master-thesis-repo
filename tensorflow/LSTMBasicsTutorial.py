@@ -1,3 +1,9 @@
+"""
+Taken from https://github.com/nicholaslocascio/bcs-lstm/blob/master/Lab.ipynb
+"""
+
+
+
 import tensorflow as tf
 import math
 import pickle as p

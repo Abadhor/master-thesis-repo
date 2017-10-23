@@ -12,14 +12,20 @@ PATH = "./data/"
 TEST = "test_seq_data.pickle"
 TRAIN = "train_seq_data.pickle"
 
-# set variables
+# model parameters
 sent_length = 10
 hidden_size = 5
 vocab_size = 9
 num_classes = 3
 batch_size = 128
 LSTM_layer_count = 1
+
+# training parameters
 num_epochs = 100
+early_stopping_epoch_limit = 10
+starter_learning_rate = 0.1
+decay_steps = 100
+decay_rate = 0.96
 
 # load data
 with io.open(PATH+TRAIN, "rb") as fp:
@@ -44,6 +50,12 @@ else:
 
 # create a session variable that we can run later.
 session = tf.Session()
+
+# implement exponential learning rate decay
+# optimizer gets called with this learning_rate and updates
+# global_step during its call to minimize()
+global_step = tf.Variable(0, trainable=False)
+learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, decay_steps, decay_rate)
 
 # the placeholder for sentences has first dimension batch_size for each
 # sentence in a batch,
@@ -123,6 +135,9 @@ loss = tf.reduce_sum(loss, axis=1)
 loss = tf.reduce_mean(loss)
 
 # calculate accuracy of word class predictions
+# first gather the indices of the highest results
+# since the classes and words are one-hot encoded,
+# this gives us the id of the class
 sent_decoded = tf.argmax(sentences,2)
 pred_classes = tf.argmax(classes,2)
 true_classes = tf.argmax(labels,2)
@@ -141,6 +156,8 @@ sentence_accuracy = tf.reduce_mean(correct_sent)
 
 
 # decode sentences into readable words and labels
+# lookup the string of the ID of the words and classes
+# in the word dictionary and label name dictionary
 sent_decoded = tf.gather(dictionary, sent_decoded)
 pred_classes = tf.gather(label_names, pred_classes)
 true_classes = tf.gather(label_names, true_classes)
@@ -148,7 +165,7 @@ true_classes = tf.gather(label_names, true_classes)
 
 '''Define the operation that specifies the AdamOptimizer and tells
    it to minimize the loss.''';
-train_step = tf.train.AdamOptimizer().minimize(loss)
+train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss, global_step=global_step)
 
 # initialize any variables
 tf.global_variables_initializer().run(session=session)
@@ -191,10 +208,16 @@ def printSent(sent, mask, pred, true):
 # over those 128 examples.
 step = 0
 
+no_imp_step_count = 0
+best_accuracy = 0
+best_sent_accuracy = 0
+best_epoch = 0
+
 for ep in range(0,num_epochs):
   batches_sent, batches_labels = createBatches(train_data, train_labels, num_batches, batch_size_last)
   for b in range(0,num_batches):
     data = {sentences: batches_sent[b], labels: batches_labels[b], dictionary:train['dictionary'], label_names:train['label_names']}
+    # TODO: replace this list of variables with dictionary
     _, loss_value_train, accuracy_value_train, sentence_accuracy_value_train, a1, a2, a3, a4 = session.run([train_step, loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask, pred_classes,true_classes], feed_dict=data)
     if (step % 50000 == 0):
       print("Minibatch train loss at step", step, ":", loss_value_train)
@@ -209,6 +232,19 @@ for ep in range(0,num_epochs):
   print("Devset accuracy: {:.3%}".format(accuracy_value_dev))
   print("Devset sentence accuracy: {:.3%}".format(sentence_accuracy_value_dev))
   printSent(a1[0],a2[0],a3[0],a4[0])
+  if accuracy_value_dev > best_accuracy:
+    no_imp_step_count = 0
+    best_accuracy = accuracy_value_dev
+    best_sent_accuracy = sentence_accuracy_value_dev
+    best_epoch = ep
+  else:
+    no_imp_step_count += 1
+    if no_imp_step_count == early_stopping_epoch_limit:
+      break
+
+print("Best Epoch:", best_epoch)
+print("Best accuracy: {:.3%}".format(best_accuracy))
+print("Best sentence accuracy: {:.3%}".format(best_sent_accuracy))
 
 """
 for step in range(num_steps):

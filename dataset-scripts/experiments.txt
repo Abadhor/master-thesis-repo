@@ -1,0 +1,111 @@
+
+Number of Candidates:  6220
+Recall 0.4183
+Precision 0.3003
+F1 0.3496
+
+Training set size, class 0: 4352
+Training set size, class 1: 4381
+
+Number of Candidates:  1165
+Recall 0.4847
+Precision 0.285
+F1 0.3589
+
+Support Vector Classifier Grid Search with  10 -fold cross validation
+Using Attributes:
+['c_value']
+Fitting 10 folds for each of 6 candidates, totalling 60 fits
+[Parallel(n_jobs=1)]: Done  60 out of  60 | elapsed:   12.1s finished
+Best parameters set found on development set:
+{'max_features': 'sqrt', 'min_samples_leaf': 5, 'n_estimators': 100, 'random_state': 5}
+Detailed classification report:
+Accuracy Score:
+0.434334763948
+Confusion Matrix:
+[[257  75]
+ [584 249]]
+             precision    recall  f1-score   support
+
+        yes       0.31      0.77      0.44       332
+         no       0.77      0.30      0.43       833
+
+avg / total       0.64      0.43      0.43      1165
+
+F1 score with regards to all keywords:
+0.336828309305
+
+
+
+Number of Candidates:  6220
+Recall 0.4183
+Precision 0.3003
+F1 0.3496
+
+Training set size, class 0: 4352
+Training set size, class 1: 4381
+
+Number of Candidates:  1165
+Recall 0.4847
+Precision 0.285
+F1 0.3589
+
+Support Vector Classifier Grid Search with  10 -fold cross validation
+Using Attributes:
+['length', 'syntaxClass', 'syntaxFrequency', 'pmi']
+Fitting 10 folds for each of 6 candidates, totalling 60 fits
+[Parallel(n_jobs=1)]: Done  60 out of  60 | elapsed:  1.5min finished
+Best parameters set found on development set:
+{'max_features': 'sqrt', 'min_samples_leaf': 1, 'n_estimators': 100, 'random_state': 5}
+Detailed classification report:
+Accuracy Score:
+0.608583690987
+Confusion Matrix:
+[[117 215]
+ [241 592]]
+             precision    recall  f1-score   support
+
+        yes       0.33      0.35      0.34       332
+         no       0.73      0.71      0.72       833
+
+avg / total       0.62      0.61      0.61      1165
+
+F1 score with regards to all keywords:
+0.22435282838
+
+
+Number of Candidates:  6220
+Recall 0.4183
+Precision 0.3003
+F1 0.3496
+
+Training set size, class 0: 4352
+Training set size, class 1: 4381
+
+Number of Candidates:  1165
+Recall 0.4847
+Precision 0.285
+F1 0.3589
+
+Support Vector Classifier Grid Search with  10 -fold cross validation
+Using Attributes:
+['length', 'TF', 'IDF', 'log_pp', 't_score', 'pmi', 'dice']
+Fitting 10 folds for each of 6 candidates, totalling 60 fits
+[Parallel(n_jobs=1)]: Done  60 out of  60 | elapsed:  1.4min finished
+Best parameters set found on development set:
+{'max_features': None, 'min_samples_leaf': 1, 'n_estimators': 100, 'random_state': 5}
+Detailed classification report:
+Accuracy Score:
+0.65321888412
+Confusion Matrix:
+[[ 78 254]
+ [150 683]]
+             precision    recall  f1-score   support
+
+        yes       0.34      0.23      0.28       332
+         no       0.73      0.82      0.77       833
+
+avg / total       0.62      0.65      0.63      1165
+
+F1 score with regards to all keywords:
+0.170865279299

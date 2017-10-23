@@ -13,6 +13,9 @@ class Candidate:
     self.name = None
     self.list = None
     self.length = None
+    self.syntax = None
+    self.syntaxClass = None
+    self.syntaxFrequency = None
     self.freq = None
     self.NPFrequency = None
     self.TF = None
@@ -35,10 +38,11 @@ class Statistics:
 
 class BaselineFeatures:
   
-  def __init__(self, dataset, addKeywords=False):
+  def __init__(self, dataset, addKeywords=False, syntaxDict=None):
     """
       addKeywords adds the keywords to the candidates
     """
+    self.syntaxDict = syntaxDict
     self.ds_keywords, self.ds_text_files = dataset.getDataset()
     self.dictionary = dataset.getDictionary()
     self.statFeatures = StatFeatures(self.dictionary)
@@ -158,15 +162,17 @@ class BaselineFeatures:
         for node in tree:
           if type(node) is nltk.tree.Tree:
             NP = []
+            NP_POS = []
             for tuple in list(node):
               NP.append(tuple[0])
+              NP_POS.append(tuple[1])
             #lemmatize each token
             NP = [ wn.lemmatize(x.strip()) for x in NP]
             NPString = " ".join(NP)
             if NPString in NPDict:
-              NPDict[NPString] = (NPDict[NPString][0],NPDict[NPString][1]+1)
+              NPDict[NPString] = (NPDict[NPString][0],NPDict[NPString][1],NPDict[NPString][2]+1)
             else:
-              NPDict[NPString] = (NP, 1)
+              NPDict[NPString] = (NP," ".join(NP_POS), 1)
       self.tokenized_files[fname] = file_sents
     #add keywords to Noun Phrases on demand
     if self.addKeywords:
@@ -182,7 +188,8 @@ class BaselineFeatures:
       c.name = item[0]
       c.list = item[1][0]
       c.length = len(item[1][0])
-      c.freq = item[1][1]
+      c.syntax = item[1][1]
+      c.freq = item[1][2]
       noun_phrases.append(c)
     if verbose:
       print()
@@ -219,6 +226,47 @@ class BaselineFeatures:
           break
         if candidate.name in previous.name:
           candidate.NPFrequency += previous.freq
+    if verbose:
+      print()
+
+  def calculateSyntaxFrequencies(self, candidates, verbose=False):
+    """Count total frequencies of syntax based on term frequencies"""
+    syntaxDict = {}
+    for idx, candidate in enumerate(candidates):
+      if verbose:
+        print(idx+1, '/', len(candidates), end='\r')
+      if candidate.syntax in syntaxDict:
+        syntaxDict[candidate.syntax] += candidate.TF
+      else:
+        syntaxDict[candidate.syntax] = candidate.TF
+    for idx, candidate in enumerate(candidates):
+      if verbose:
+        print(idx+1, '/', len(candidates), end='\r')
+      candidate.syntaxFrequency = syntaxDict[candidate.syntax]
+    if verbose:
+      print()
+  
+  def convertSyntaxToNumerical(self, candidates, verbose=False):
+    """Convert syntax string classes to numerical classes"""
+    syntaxDict = {}
+    classNum = 0
+    if self.syntaxDict == None:
+      for idx, candidate in enumerate(candidates):
+        if verbose:
+          print(idx+1, '/', len(candidates), end='\r')
+        if candidate.syntax not in syntaxDict:
+          syntaxDict[candidate.syntax] = classNum
+          classNum += 1
+      self.syntaxDict = syntaxDict
+    else:
+      syntaxDict = self.syntaxDict
+    for idx, candidate in enumerate(candidates):
+      if verbose:
+        print(idx+1, '/', len(candidates), end='\r')
+      if candidate.syntax in syntaxDict:
+        candidate.syntaxClass = syntaxDict[candidate.syntax]
+      else:
+        candidate.syntaxClass = -1
     if verbose:
       print()
   
@@ -312,7 +360,12 @@ class BaselineFeatures:
     for candidate in candidates:
       row = []
       for attr in attrs:
-        row.append(attrgetter(attr)(candidate))
+        if attr == "syntaxClass": #one-hot categorical
+          classes = len(self.syntaxDict)
+          classNum = candidate.syntaxClass
+          row.extend([1 if x == classNum else 0 for x in range(0,classes)])
+        else:
+          row.append(attrgetter(attr)(candidate))
       X.append(row)
       if candidate.name in gt_names:
         y.append(1)

@@ -2,6 +2,7 @@ from SemEval2017Dataset import SemEval2017Dataset
 from BaselineFeatures import BaselineFeatures
 from sklearn import svm
 from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, classification_report, make_scorer
 from sklearn.preprocessing import StandardScaler
@@ -36,7 +37,7 @@ def keyword_f1_function(y_true, y_pred, np_recall=1):
 def oversampleClass(X, y, c_name, factor):
   a_x = []
   a_y = []
-  for i in range(0,math.floor(factor)):
+  for i in range(1,math.floor(factor)):
     for idx,r in enumerate(X):
       if y[idx] == c_name:
         a_x.append(r)
@@ -49,8 +50,28 @@ def oversampleClass(X, y, c_name, factor):
         a_y.append(c_name)
   return np.append(X, np.array(a_x), axis=0), np.append(y, np.array(a_y), axis=0)
 
+def undersampleClass(X, y, c_name, factor):
+  a_x = []
+  a_y = []
+  for idx,r in enumerate(X):
+    if y[idx] == c_name:
+      if random.random() < factor:
+        a_x.append(r)
+        a_y.append(c_name)
+      else:
+        a_x.append(r)
+        a_y.append(c_name)
+  return np.array(a_x), np.array(a_y)
 
-def getBaselineFeatures(folder, addKeywords, verbose=False):
+def countClass(X, y, c_name):
+  count = 0
+  for idx,r in enumerate(X):
+    if y[idx] == c_name:
+      count += 1
+  return count
+
+
+def getBaselineFeatures(folder, addKeywords, verbose=False, syntaxDict=None):
   
   ds.extractKeywords(folder, "ann")
   ds.filterUnigramKeywords()
@@ -60,7 +81,7 @@ def getBaselineFeatures(folder, addKeywords, verbose=False):
   ds.extractSentences(folder, "txt", xml=False, verbose=verbose)
   ds.dumpSentences(OUT_FOLDER, "sents")
   
-  baseline = BaselineFeatures(ds, addKeywords=addKeywords)
+  baseline = BaselineFeatures(ds, addKeywords=addKeywords, syntaxDict=syntaxDict)
   print("Tagging...")
   candidates = baseline.extractNounPhrases(verbose=verbose)
   
@@ -82,6 +103,10 @@ def getBaselineFeatures(folder, addKeywords, verbose=False):
   #candidates = baseline.filterTotalFrequency(candidates)
   print("Counting raw TF and IDF...")
   baseline.calculateRawTF_IDF(candidates, verbose=verbose)
+  print("Counting Syntax Frequencies...")
+  baseline.calculateSyntaxFrequencies(candidates, verbose=verbose)
+  print("Convert Syntax to numerical SyntaxClass...")
+  baseline.convertSyntaxToNumerical(candidates, verbose=verbose)
   print("Number of Candidates: ", len(candidates))
   
   s = baseline.calculateStatistics(candidates, baseline.ds_keywords)
@@ -113,32 +138,41 @@ def plotAttr(X,y, plotAttr, attrs):
   plt.show()
 
 #TRAIN
-baseline, candidates = getBaselineFeatures(DATA_FOLDER, addKeywords=True, verbose=True)
+baseline, candidates = getBaselineFeatures(DATA_FOLDER, addKeywords=False, verbose=True)
 #divide some features by number of files in data set
 #to make training and test set compatible
 norm = ['TF']
 baseline.normalizeFeatures(candidates, norm)
 log_features = ['IDF']
 baseline.logFeatures(candidates,log_features, base=2)
-attrs = ['length', 'TF', 'IDF', 'c_value', 'log_pp', 't_score', 'pmi', 'dice']
+#attrs = ['length', 'TF', 'IDF', 'c_value', 'log_pp', 't_score', 'pmi', 'dice']
+#attrs = ['length', 'syntaxClass', 'syntaxFrequency', 'pmi']
+#attrs = ['c_value']
+attrs = ['length', 'TF', 'IDF', 'log_pp', 't_score', 'pmi', 'dice']
 
 features_train, labels_train = baseline.asNumpy(candidates, baseline.ds_keywords, attrs)
+print("Training set size, class 0:", countClass(features_train, labels_train, 0))
+print("Training set size, class 1:", countClass(features_train, labels_train, 1))
 #oversample keywords
-features_train, labels_train = oversampleClass(features_train, labels_train, 1, 2)
+features_train, labels_train = oversampleClass(features_train, labels_train, 1, 2.33)
 #scale training set to 0 mean and unit variance
-scaler = StandardScaler()
-scaler.fit(features_train)
-scaler.transform(features_train)
+#scaler = StandardScaler()
+#scaler.fit(features_train)
+#scaler.transform(features_train)
 
+print("Oversampled size, class 0:", countClass(features_train, labels_train, 0))
+print("Oversampled size, class 1:", countClass(features_train, labels_train, 1))
+#plotAttr(features_train, labels_train, 1, attrs)
+#exit()
 
 #TEST
-baseline2, candidates2 = getBaselineFeatures(TEST_FOLDER, addKeywords=False, verbose=True)
+baseline2, candidates2 = getBaselineFeatures(TEST_FOLDER, addKeywords=False, verbose=True, syntaxDict=baseline.syntaxDict)
 #divide some features by number of files in data set
 #to make training and test set compatible
 baseline2.normalizeFeatures(candidates2, norm)
 baseline2.logFeatures(candidates2,log_features, base=2)
 features_test, labels_test = baseline2.asNumpy(candidates2, baseline2.ds_keywords, attrs)
-scaler.transform(features_test)
+#scaler.transform(features_test)
 s = baseline2.calculateStatistics(candidates2, baseline2.ds_keywords)
 print("Recall", f.format(s.recall))
 np_recall = s.recall
@@ -157,36 +191,50 @@ param_grid = [
   {
     'C': [1, 10, 100], 
     'kernel': ['linear'], 
-    'class_weight':[{0:1.0, 1:1.0},{0:1.0, 1:2.0},{0:1.0, 1:3.0}]
+    'class_weight':[{0:1.0, 1:1.0},{0:1.0, 1:1.25},{0:1.0, 1:1.5}]
   },
   {
     'C': [1, 10, 100], 
     'gamma': [0.1,0.01,0.001], 
     'kernel': ['rbf'],
-    'class_weight':[{0:1.0, 1:1.0},{0:1.0, 1:2.0},{0:1.0, 1:3.0}]
+    'class_weight':[{0:1.0, 1:1.0},{0:1.0, 1:1.25},{0:1.0, 1:1.5}]
   }
 ]
 param_grid_MLP = [
   {
-    'hidden_layer_sizes': [(4,), (8,), (16,),(3,), (7,), (15,)], 
+    'hidden_layer_sizes': [(4,), (8,), (16,),(3,), (40,), (100,)], 
     'activation': ['tanh','relu'], 
     'alpha':[0.01,0.001,0.0001],
-    'solver':['adam']
+    'solver':['adam'],
+    'random_state':[5]
   },
   {
-    'hidden_layer_sizes': [(4,), (8,), (16,),(3,), (7,), (15,)], 
+    'hidden_layer_sizes': [(4,), (8,), (16,),(3,), (40,), (100,)], 
     'activation': ['tanh','relu'], 
     'alpha':[0.01,0.001,0.0001],
     'solver':['sgd'],
     'learning_rate':['constant','adaptive'],
-    'early_stopping':[True]
+    'early_stopping':[True],
+    'random_state':[5]
   }
 ]
-k = 5
+param_randomForest = [
+  {
+    'n_estimators': [100], 
+    'max_features': ['sqrt',None], 
+    'min_samples_leaf': [1,3,5],
+    'random_state':[5]
+  }
+]
+k = 10
 print("Support Vector Classifier Grid Search with ",k,"-fold cross validation")
-#clf = GridSearchCV(svm.SVC(), param_grid, cv=k,scoring=score, verbose=2)
-clf = GridSearchCV(MLPClassifier(), param_grid_MLP, cv=k,scoring=score, verbose=2)
-#clf = svm.SVC(class_weight=class_weights)
+print("Using Attributes:")
+print(attrs)
+#clf = GridSearchCV(svm.SVC(), param_grid, cv=k,scoring=score, verbose=1)
+#clf = GridSearchCV(svm.SVC(), param_grid, cv=k,scoring="accuracy", verbose=2)
+#clf = GridSearchCV(MLPClassifier(), param_grid_MLP, cv=k,scoring="accuracy", verbose=1)
+clf = GridSearchCV(RandomForestClassifier(), param_randomForest, cv=k,scoring="accuracy", verbose=1)
+
 clf.fit(features_train, labels_train)
 print("Best parameters set found on development set:")
 print(clf.best_params_)
@@ -201,7 +249,6 @@ print(confusion_matrix(labels_test , pred, labels=[1,0]))
 print(classification_report(labels_test , pred, labels=[1,0], target_names=['yes','no']))
 print("F1 score with regards to all keywords:")
 print(keyword_f1_function(labels_test , pred, np_recall=np_recall))
-#plotAttr(features_train, labels_train, 0, attrs)
 
 
 #DEBUG
