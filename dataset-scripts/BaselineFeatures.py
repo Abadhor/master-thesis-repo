@@ -65,6 +65,16 @@ class BaselineFeatures:
     s.F1 = 2 * s.precision * s.recall / (s.precision + s.recall)
     return s
   
+  def calculateNestedRecall(self, candidates, names_set):
+    true_positive = 0
+    for n in names_set:
+      for c in candidates:
+        if n in c.name:
+          true_positive += 1
+          break
+    positive = len(names_set)
+    return true_positive / positive
+  
   def normalizeFeatures(self, candidates, attrs):
     """Replace selected attributes with themselves divided by the number of files in dataset"""
     for candidate in candidates:

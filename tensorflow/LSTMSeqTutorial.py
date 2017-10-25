@@ -10,7 +10,10 @@ random.seed(10)
 # data path
 PATH = "./data/"
 TEST = "test_seq_data.pickle"
+DEV = "dev_seq_data.pickle"
 TRAIN = "train_seq_data.pickle"
+TMP_MODEL = "./tmp/model.ckpt"
+BEST_MODEL = "./models/best_model.session"
 
 # model parameters
 sent_length = 10
@@ -39,6 +42,12 @@ with io.open(PATH+TEST, "rb") as fp:
 
 test_data = test['data']
 test_labels = test['labels']
+
+with io.open(PATH+DEV, "rb") as fp:
+  dev = pickle.load(fp)
+
+dev_data = dev['data']
+dev_labels = dev['labels']
 
 # define the number of batches
 num_batches = len(train_data) // batch_size
@@ -168,7 +177,13 @@ true_classes = tf.gather(label_names, true_classes)
 train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss, global_step=global_step)
 
 # initialize any variables
-tf.global_variables_initializer().run(session=session)
+init_op = tf.global_variables_initializer()
+
+# Add ops to save and restore all the variables.
+saver = tf.train.Saver()
+
+# run init_op
+init_op.run(session=session)
 
 # create batches, randomizing the order of the samples
 def createBatches(data, labels, num_batches, batch_size_last):
@@ -226,7 +241,7 @@ for ep in range(0,num_epochs):
       printSent(a1[0],a2[0],a3[0],a4[0])
     step += 1
   # validation on dev set
-  data_testing = {sentences: test_data, labels: test_labels}
+  data_testing = {sentences: dev_data, labels: dev_labels}
   loss_value_dev, accuracy_value_dev, sentence_accuracy_value_dev, a1, a2, a3, a4 = session.run([loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask,pred_classes,true_classes], feed_dict=data)
   print("Devset loss at Epoch", ep, ":", loss_value_dev)
   print("Devset accuracy: {:.3%}".format(accuracy_value_dev))
@@ -237,6 +252,8 @@ for ep in range(0,num_epochs):
     best_accuracy = accuracy_value_dev
     best_sent_accuracy = sentence_accuracy_value_dev
     best_epoch = ep
+    save_path = saver.save(session, TMP_MODEL)
+    print("Model saved in file: %s" % save_path)
   else:
     no_imp_step_count += 1
     if no_imp_step_count == early_stopping_epoch_limit:
@@ -245,6 +262,20 @@ for ep in range(0,num_epochs):
 print("Best Epoch:", best_epoch)
 print("Best accuracy: {:.3%}".format(best_accuracy))
 print("Best sentence accuracy: {:.3%}".format(best_sent_accuracy))
+
+# validation on test set
+print("Validating on test set...")
+saver.restore(session, TMP_MODEL)
+print("Model restored.")
+data_testing = {sentences: test_data, labels: test_labels}
+loss_value_test, accuracy_value_test, sentence_accuracy_value_test, a1, a2, a3, a4 = session.run([loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask,pred_classes,true_classes], feed_dict=data)
+print("Test set loss at Epoch", best_epoch, ":", loss_value_test)
+print("Test set accuracy: {:.3%}".format(accuracy_value_test))
+print("Test set sentence accuracy: {:.3%}".format(sentence_accuracy_value_test))
+printSent(a1[0],a2[0],a3[0],a4[0])
+
+save_path = saver.save(session, BEST_MODEL)
+print("Best Model saved in file: %s" % save_path)
 
 """
 for step in range(num_steps):

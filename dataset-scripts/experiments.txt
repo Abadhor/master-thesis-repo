@@ -109,3 +109,89 @@ avg / total       0.62      0.65      0.63      1165
 
 F1 score with regards to all keywords:
 0.170865279299
+
+
+File: 350 / 350
+Tagging...
+File: 350 / 350
+Recall 0.4219
+Precision 0.2911
+F1 0.3445
+Sorting...
+Number of Candidates:  6473
+Filtering Formulas...
+Counting Total NP Frequencies...
+6220 / 6220
+Counting raw TF and IDF...
+6220 / 6220
+Counting Syntax Frequencies...
+6220 / 6220
+Convert Syntax to numerical SyntaxClass...
+6220 / 6220
+Number of Candidates:  6220
+Recall 0.4183
+Precision 0.3003
+F1 0.3496
+Nested Recall 0.5779
+Calculating candidate nested frequencies...
+6220 / 6220
+Calculating C-Values...
+Calculating Perplexity...
+9072 / 9072
+Calculating Statistical Features...
+Training set size, class 0: 4352
+Training set size, class 1: 1868
+Oversampled size, class 0: 4352
+Oversampled size, class 1: 4381
+File: 50 / 50
+Tagging...
+File: 50 / 50
+Recall 0.4876
+Precision 0.2788
+F1 0.3548
+Sorting...
+Number of Candidates:  1198
+Filtering Formulas...
+Counting Total NP Frequencies...
+1165 / 1165
+Counting raw TF and IDF...
+1165 / 1165
+Counting Syntax Frequencies...
+1165 / 1165
+Convert Syntax to numerical SyntaxClass...
+1165 / 1165
+Number of Candidates:  1165
+Recall 0.4847
+Precision 0.285
+F1 0.3589
+Nested Recall 0.6555
+Calculating candidate nested frequencies...
+1165 / 1165
+Calculating C-Values...
+Calculating Perplexity...
+2822 / 2822
+Calculating Statistical Features...
+Recall 0.4847
+Precision 0.285
+F1 0.3589
+Support Vector Classifier Grid Search with  10 -fold cross validation
+Using Attributes:
+['length', 'c_value', 'IDF', 'log_pp', 't_score', 'pmi', 'dice', 'syntaxClass', 'syntaxFrequency']
+Fitting 10 folds for each of 6 candidates, totalling 60 fits
+[Parallel(n_jobs=1)]: Done  60 out of  60 | elapsed:  2.1min finished
+Best parameters set found on development set:
+{'max_features': None, 'min_samples_leaf': 1, 'n_estimators': 100, 'random_state': 5}
+Detailed classification report:
+Accuracy Score:
+0.668669527897
+Confusion Matrix:
+[[ 57 275]
+ [111 722]]
+             precision    recall  f1-score   support
+
+        yes       0.34      0.17      0.23       332
+         no       0.72      0.87      0.79       833
+
+avg / total       0.61      0.67      0.63      1165
+
+F1 score with regards to all keywords:

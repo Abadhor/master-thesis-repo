@@ -8,6 +8,7 @@ random.seed(5)
 
 PATH = "./data/"
 TEST = "test_seq_data.pickle"
+DEV = "dev_seq_data.pickle"
 TRAIN = "train_seq_data.pickle"
 
 WORDS = ['a','b','c','d','e','f','g']
@@ -19,9 +20,12 @@ LABELS = [CLASS_OUTSIDE, CLASS_VALID, CLASS_INVALID]
 SPECIAL = 'X'
 MOD = 'M'
 SENT_NUM = 10000
+TEST_RATIO = 0.1
+DEV_RATIO = 0.1
+TRAIN_RATIO = 0.8
 SENT_MAX_LEN = 10
 SENT_MIN_LEN = 5
-TEST_RATIO = 0.1
+
 
 DICT = WORDS.copy()
 DICT.append(SPECIAL)
@@ -68,21 +72,38 @@ def encode(ls):
       labels[s_idx,w_idx,labels_idx] = 1
   return data, labels
 
-test = []
-for i in range(0, int(SENT_NUM*TEST_RATIO)):
+sent_dict = {}
+while len(sent_dict) < SENT_NUM:
   s = createSentence(random.randrange(SENT_MIN_LEN, SENT_MAX_LEN+1))
   a = createAnnotation(s)
-  test.append((s,a))
+  s_str = " ".join(s)
+  sent_dict[s_str] = (s,a)
+
+sents = list(sent_dict.values())
+cur = 0
+
+test = []
+for i in range(cur, cur+int(SENT_NUM*TEST_RATIO)):
+  test.append(sents[i])
+cur = cur+int(SENT_NUM*TEST_RATIO)
+
+dev = []
+for i in range(cur, cur+int(SENT_NUM*DEV_RATIO)):
+  dev.append(sents[i])
+cur = cur+int(SENT_NUM*DEV_RATIO)
 
 train = []
-for i in range(0, int(SENT_NUM*(1-TEST_RATIO))):
-  s = createSentence(random.randrange(SENT_MIN_LEN, SENT_MAX_LEN+1))
-  a = createAnnotation(s)
-  train.append((s,a))
+for i in range(cur, cur+int(SENT_NUM*TRAIN_RATIO)):
+  train.append(sents[i])
 
 data, labels = encode(test)
 with io.open(PATH+TEST, "wb") as fp:
   pickle.dump({"data":data, "labels":labels, "dictionary":DICT, "label_names":LABELS}, fp)
+
+data, labels = encode(dev)
+with io.open(PATH+DEV, "wb") as fp:
+  pickle.dump({"data":data, "labels":labels, "dictionary":DICT, "label_names":LABELS}, fp)
+
 data, labels = encode(train)
 with io.open(PATH+TRAIN, "wb") as fp:
   pickle.dump({"data":data, "labels":labels, "dictionary":DICT, "label_names":LABELS}, fp)

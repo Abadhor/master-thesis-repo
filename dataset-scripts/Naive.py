@@ -16,6 +16,7 @@ OUT_FOLDER = "D:\\Uni\\MasterThesis\\Data\\SemEval2017_AutomaticKeyphraseExtract
 OUT_FOLDER_KWDS = "D:\\Uni\\MasterThesis\\Data\\SemEval2017_AutomaticKeyphraseExtraction\\scienceie2017_train\\train2_keywords\\"
 OUT_FOLDER_FEATURES ="D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/dump/"
 TEST_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/scienceie2017_dev/dev/"
+#TEST_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/semeval_articles_test/"
 DEBUG = False
 f = "{:.4}"
 ds = SemEval2017Dataset()
@@ -113,6 +114,8 @@ def getBaselineFeatures(folder, addKeywords, verbose=False, syntaxDict=None):
   print("Recall", f.format(s.recall))
   print("Precision", f.format(s.precision))
   print("F1", f.format(s.F1))
+  nested_recall = baseline.calculateNestedRecall(candidates, baseline.ds_keywords)
+  print("Nested Recall", f.format(nested_recall))
   
   print("Calculating candidate nested frequencies...")
   baseline.calculateNestedFrequencies(candidates, verbose=verbose)
@@ -146,9 +149,10 @@ baseline.normalizeFeatures(candidates, norm)
 log_features = ['IDF']
 baseline.logFeatures(candidates,log_features, base=2)
 #attrs = ['length', 'TF', 'IDF', 'c_value', 'log_pp', 't_score', 'pmi', 'dice']
-#attrs = ['length', 'syntaxClass', 'syntaxFrequency', 'pmi']
 #attrs = ['c_value']
-attrs = ['length', 'TF', 'IDF', 'log_pp', 't_score', 'pmi', 'dice']
+#attrs = ['length', 'syntaxClass', 'syntaxFrequency', 'pmi']
+#attrs = ['length', 'TF', 'IDF', 'log_pp', 't_score', 'pmi', 'dice']
+attrs = ['length', 'c_value', 'IDF', 'log_pp', 't_score', 'pmi', 'dice', 'syntaxClass', 'syntaxFrequency']
 
 features_train, labels_train = baseline.asNumpy(candidates, baseline.ds_keywords, attrs)
 print("Training set size, class 0:", countClass(features_train, labels_train, 0))
