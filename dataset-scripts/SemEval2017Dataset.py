@@ -5,20 +5,36 @@ import csv
 import nltk.tokenize.punkt as punkt
 import re
 import xml.etree.ElementTree as ET
+import spacy
 from KeywordDataset import KeywordDataset
+from MWUHashTree import MWUHashTree
+from nltk.stem import WordNetLemmatizer
 
 class SemEval2017Dataset(KeywordDataset):
   
-  def __init__(self):
+  def __init__(self, useSpacy = True, lemmatize = False):
+    super().__init__()
+    self.useSpacy = useSpacy
+    self.lemmatize = lemmatize
+    if useSpacy:
+      self.nlp = spacy.load('en_core_web_md')
+    if self.lemmatize:
+      self.wn = WordNetLemmatizer()
+    
+    # NLTK sentence splitter
     self.ABBREV_TYPES = set(['e.g', 'eq', 'eqs', 'etc', 'refs', 'ref', 'fig', 'figs', 'i.e', 'al', 'inc', 'sec', 'cf', 'i.v', 'adapt'])
     self.sentence_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
-    #add extra
+    
+    # regex definitions
     self.sentence_tokenizer._params.abbrev_types.update(self.ABBREV_TYPES)
     self.RE_REF = re.compile(r'\[[\d\W]*?\]')
     self.RE_FIG = re.compile(r'[F|f]igs?\. *\d+')
     self.RE_NEWLINE = re.compile(r'\n')
     self.RE_OTHERS = re.compile(r'[^a-zA-Z0-9_\-\. ]+')
+    self.RE_NUMBERS = re.compile(r'[-]?[\d]+[\W\d]*')
+    self.RE_NUMBERS_SUB = '$$$$'
     
+    # namespaces for xml extraction
     self.ns_doc = {'xocs':'http://www.elsevier.com/xml/xocs/dtd',
     'xs':'http://www.w3.org/2001/XMLSchema',
     'xsi':'http://www.w3.org/2001/XMLSchema-instance',
@@ -50,33 +66,42 @@ class SemEval2017Dataset(KeywordDataset):
   
   def extractKeywords(self, folder, ext):
     """Extract Keywords from files in folder with specified extension"""
-    self.keywords = set()
+    self.keywords = MWUHashTree()
     fileList = os.listdir(folder)
     for fname in fileList:
       if fname[len(fname)-len(ext):] == ext:
-        self.extractKeywordsFromFile(folder + fname)
+        self.extractKeywordsFromFile(folder, fname, ext)
   
   def dumpKeywords(self, folder, fileName):
     """Write keyword set to file"""
+    # TODO: change to JSON
     with io.open(folder + fileName, 'w', encoding='utf8') as outfile:
-      for kwd in sorted(list(self.keywords)):
-        outfile.write(kwd + '\n')
+      for kwd in sorted(list(self.keywords.keys())):
+        outfile.write(" ".join(kwd) + '\n')
   
   def loadKeywords(self, folder, fileName):
     """Read keyword set from file"""
+    # TODO: change to JSON
     self.keywords = set()
     with io.open(folder + fileName, 'r', encoding='utf8') as infile:
       for line in infile:
         self.keywords.add(line.strip())
   
-  def extractKeywordsFromFile(self, filePath):
+  def extractKeywordsFromFile(self, folder, fname, ext):
+    filePath = folder + fname
     infile = io.open(filePath, 'r', encoding='utf8')
     reader = csv.reader(infile, delimiter='\t')
     for row in reader:
       if (row[0] == '*') or (row[0][0] == 'R'):
         continue
-      kw = " ".join(nltk.word_tokenize(row[2]))
-      self.keywords.add(kw)
+      if self.useSpacy:
+        kw = self.word_tokenize_Spacy(row[2])
+      else:
+        kw = nltk.word_tokenize(row[2])
+      if self.lemmatize:
+        kw = [self.wn.lemmatize(x) for x in kw]
+      # debug: safe last known file
+      self.keywords[kw] = fname[:len(fname)-(len(ext)+1)]
     infile.close()
   
   def extractSentences(self, folder, ext, xml=False, verbose=False):
@@ -94,10 +119,11 @@ class SemEval2017Dataset(KeywordDataset):
       else:
         paras = self.extractFromText(folder + fname)
       for para in paras:
-        sents = self.split_sentences(para)
+        if self.useSpacy:
+          sents = self.split_sentences_Spacy(para)
+        else:
+          sents = self.split_sentences_NLTK(para)
         file_sentences.extend(sents)
-        for i in range(0, len(file_sentences)):
-          file_sentences[i] = file_sentences[i].strip()
       self.text_files[key] = file_sentences
     if verbose:
       print()
@@ -122,13 +148,19 @@ class SemEval2017Dataset(KeywordDataset):
             file_sentences.append(line.strip())
         self.text_files[key] = file_sentences
   
-  def getDictionary(self):
-    """Get a dictionary with word frequencies for the whole dataset"""
+  def tokenize(self):
+    """Tokenize the dataset and create a dictionary with word frequencies for the whole dataset"""
+    self.corpus = None
     dictionary = {}
     for fname in self.text_files.keys():
       file = self.text_files[fname]
-      for line in file:
-        line_tokens = nltk.word_tokenize(line)
+      for i in range(len(file)):
+        sentence = file[i]
+        if self.useSpacy:
+          line_tokens = self.word_tokenize_Spacy(sentence)
+        else:
+          line_tokens = nltk.word_tokenize(sentence)
+        file[i] = line_tokens
         if len(line_tokens) == 0:
           continue
         for token in line_tokens:
@@ -136,7 +168,7 @@ class SemEval2017Dataset(KeywordDataset):
             dictionary[token] = 1
           else:
             dictionary[token] += 1
-    return dictionary
+    self.dictionary = dictionary
   
   def extractXMLfromFile(self, filePath):
     """Read a SemEval2017 xml file and return paragraph texts.
@@ -163,12 +195,52 @@ class SemEval2017Dataset(KeywordDataset):
       retString += self.getNodeText(child)
     return retString
   
-  def split_sentences(self, text):
+  def split_sentences_NLTK(self, text):
     text = self.RE_NEWLINE.sub('', text)
     text = self.RE_REF.sub('', text)
     text = self.RE_FIG.sub('', text)
     #text = self.RE_OTHERS.sub('', text)
-    return self.sentence_tokenizer.tokenize(text)
+    sentences = self.sentence_tokenizer.tokenize(text)
+    sentences = [sent.strip() for sent in sentences]
+    return sentences
+  
+  def split_sentences_Spacy(self, text):
+    text = text.replace(chr(8211), '-')
+    doc = self.nlp(text)
+    sentences = [sent.string.strip() for sent in doc.sents]
+    return sentences
+  
+  def word_tokenize_Spacy(self, text):
+    """Enhance spacy tokenization"""
+    text = text.replace(chr(8211), '-')
+    doc = self.nlp(text)
+    tokens = [token.text.strip() for token in doc]
+    # combine: 'semi', '-', 'optimized' -> 'semi-optimized'
+    tmp = []
+    minus = False
+    prev = -1
+    for i in range(len(tokens)):
+      if not minus:
+        if tokens[i] != '-':
+          tmp.append(tokens[i])
+          prev += 1
+        else:
+          if prev == -1:
+            tmp.append(tokens[i])
+            prev += 1
+          else:
+            tmp[prev] = tmp[prev] + tokens[i]
+            minus = True
+      else:
+        tmp[prev] = tmp[prev] + tokens[i]
+        minus = False
+    tokens = tmp
+    # replace numbers with symbol
+    tokens = [self.RE_NUMBERS.sub(self.RE_NUMBERS_SUB, token) for token in tokens]
+    # lemmatize
+    if self.lemmatize:
+      tokens = [self.wn.lemmatize(x) for x in tokens]
+    return tokens
   
   def extractFromText(self, filePath):
     with io.open(filePath, 'r', encoding='utf8') as infile:
@@ -178,6 +250,12 @@ class SemEval2017Dataset(KeywordDataset):
       return para
   
   def filterUnigramKeywords(self):
-    self.keywords = {x for x in self.keywords if len(nltk.word_tokenize(x)) >= 2}
+    items = self.keywords.items()
+    self.keywords = MWUHashTree()
+    for item in items:
+      key = item[0]
+      value = item[1]
+      if len(key) > 1:
+        self.keywords[key] = value
 
 

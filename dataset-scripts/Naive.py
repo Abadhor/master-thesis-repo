@@ -19,7 +19,6 @@ TEST_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction
 #TEST_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/semeval_articles_test/"
 DEBUG = False
 f = "{:.4}"
-ds = SemEval2017Dataset()
 random.seed(5)
 
 def keyword_f1_function(y_true, y_pred, np_recall=1):
@@ -73,7 +72,7 @@ def countClass(X, y, c_name):
 
 
 def getBaselineFeatures(folder, addKeywords, verbose=False, syntaxDict=None):
-  
+  ds = SemEval2017Dataset(useSpacy=False, lemmatize=True)
   ds.extractKeywords(folder, "ann")
   ds.filterUnigramKeywords()
   ds.dumpKeywords(OUT_FOLDER_KWDS, "keywords")

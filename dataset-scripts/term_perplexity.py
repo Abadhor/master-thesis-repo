@@ -35,7 +35,7 @@ class Perplexity:
     """update frequencies in dictonary"""
     #TweetTokenizer to handle non-alphabetic characters better
     for line in file:
-      line_tokens = nltk.word_tokenize(line)
+      line_tokens = line
       if len(line_tokens) == 0:
         continue
       for idx,token in enumerate(line_tokens):

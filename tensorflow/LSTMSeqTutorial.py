@@ -9,14 +9,21 @@ random.seed(10)
 
 # data path
 PATH = "./data/"
+"""
 TEST = "test_seq_data.pickle"
 DEV = "dev_seq_data.pickle"
 TRAIN = "train_seq_data.pickle"
+"""
+TEST = "test_seq_data_adv.pickle"
+DEV = "dev_seq_data_adv.pickle"
+TRAIN = "train_seq_data_adv.pickle"
+#"""
 TMP_MODEL = "./tmp/model.ckpt"
 BEST_MODEL = "./models/best_model.session"
 
 # model parameters
-sent_length = 10
+#sent_length = 10
+sent_length = 20
 hidden_size = 5
 vocab_size = 9
 num_classes = 3

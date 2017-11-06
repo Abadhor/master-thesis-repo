@@ -47,15 +47,11 @@ class BaselineFeatures:
     self.dictionary = dataset.getDictionary()
     self.statFeatures = StatFeatures(self.dictionary)
     self.addKeywords = addKeywords
-    #lemmatize keywords
-    wn = WordNetLemmatizer()
-    self.ds_keywords = [ nltk.word_tokenize(x) for x in self.ds_keywords ]
-    self.ds_keywords = { " ".join([wn.lemmatize(y.strip()) for y in x]) for x in self.ds_keywords }
   
   def calculateStatistics(self, candidates, names_set):
     true_positive = 0
     for c in candidates:
-      if c.name in names_set:
+      if c.list in names_set:
         true_positive += 1
     positive = len(names_set)
     detected_positive = len(candidates) #true + false positive
@@ -67,11 +63,11 @@ class BaselineFeatures:
   
   def calculateNestedRecall(self, candidates, names_set):
     true_positive = 0
-    for n in names_set:
-      for c in candidates:
-        if n in c.name:
-          true_positive += 1
-          break
+    for c in candidates:
+      tokens = c.list
+      for idx in range(len(tokens)):
+        ls = names_set.getAll(tokens[idx:])
+        true_positive += len(ls)
     positive = len(names_set)
     return true_positive / positive
   
@@ -160,7 +156,7 @@ class BaselineFeatures:
       file = self.ds_text_files[fname]
       file_sents = []
       for line in file:
-        line_tokens = nltk.word_tokenize(line)
+        line_tokens = line
         #dont lemmatize line_tokens used for PoS tagging
         file_sents.append(" ".join([ wn.lemmatize(x.strip()) for x in line_tokens]))
         #file_sents.append(" ".join(line_tokens))
@@ -377,7 +373,7 @@ class BaselineFeatures:
         else:
           row.append(attrgetter(attr)(candidate))
       X.append(row)
-      if candidate.name in gt_names:
+      if candidate.list in gt_names:
         y.append(1)
       else:
         y.append(0)
