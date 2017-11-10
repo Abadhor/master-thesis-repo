@@ -5,19 +5,18 @@ import csv
 import nltk.tokenize.punkt as punkt
 import re
 import xml.etree.ElementTree as ET
-import spacy
 from KeywordDataset import KeywordDataset
 from MWUHashTree import MWUHashTree
 from nltk.stem import WordNetLemmatizer
 
 class SemEval2017Dataset(KeywordDataset):
   
-  def __init__(self, useSpacy = True, lemmatize = False):
+  def __init__(self, spacyNLP = None, lemmatize = False):
     super().__init__()
-    self.useSpacy = useSpacy
+    self.nlp = spacyNLP
     self.lemmatize = lemmatize
-    if useSpacy:
-      self.nlp = spacy.load('en_core_web_md')
+    if self.nlp:
+      self.useSpacy = True
     if self.lemmatize:
       self.wn = WordNetLemmatizer()
     
@@ -30,9 +29,16 @@ class SemEval2017Dataset(KeywordDataset):
     self.RE_REF = re.compile(r'\[[\d\W]*?\]')
     self.RE_FIG = re.compile(r'[F|f]igs?\. *\d+')
     self.RE_NEWLINE = re.compile(r'\n')
-    self.RE_OTHERS = re.compile(r'[^a-zA-Z0-9_\-\. ]+')
-    self.RE_NUMBERS = re.compile(r'[-]?[\d]+[\W\d]*')
+    self.RE_OTHERS = re.compile(r'[^a-zA-Z0-9\. ,\/#!$%\^&\*;:{}=\-_`~()\+\[\]]+')
+    self.RE_OTHERS_SUB = '§§§§'
+    self.RE_NUMBERS = re.compile(r'^[-]?[\d]+[\W\d]*$')
     self.RE_NUMBERS_SUB = '$$$$'
+    self.RE_DASH = re.compile(r'\s-\s')
+    self.RE_DASH_SUB = ' -- '
+    self.RE_ET_AL = re.compile(r' et al\.')
+    self.RE_ET_AL_SUB = ' et al'
+    self.RE_CA = re.compile(r' ca\.')
+    self.RE_CA_SUB = ' ca'
     
     # namespaces for xml extraction
     self.ns_doc = {'xocs':'http://www.elsevier.com/xml/xocs/dtd',
@@ -92,7 +98,7 @@ class SemEval2017Dataset(KeywordDataset):
     infile = io.open(filePath, 'r', encoding='utf8')
     reader = csv.reader(infile, delimiter='\t')
     for row in reader:
-      if (row[0] == '*') or (row[0][0] == 'R'):
+      if (row[0] == '*') or (row[0][0] == 'R') or (row[1][:4] == 'Task'):
         continue
       if self.useSpacy:
         kw = self.word_tokenize_Spacy(row[2])
@@ -206,6 +212,11 @@ class SemEval2017Dataset(KeywordDataset):
   
   def split_sentences_Spacy(self, text):
     text = text.replace(chr(8211), '-')
+    text = text.replace('"', '')
+    text = text.replace('“', '')
+    text = text.replace('”', '')
+    text = self.RE_ET_AL.sub(self.RE_ET_AL_SUB, text)
+    text = self.RE_CA.sub(self.RE_CA_SUB, text)
     doc = self.nlp(text)
     sentences = [sent.string.strip() for sent in doc.sents]
     return sentences
@@ -213,6 +224,10 @@ class SemEval2017Dataset(KeywordDataset):
   def word_tokenize_Spacy(self, text):
     """Enhance spacy tokenization"""
     text = text.replace(chr(8211), '-')
+    text = text.replace('"', '')
+    text = text.replace('“', '')
+    text = text.replace('”', '')
+    text = self.RE_DASH.sub(self.RE_DASH_SUB, text)
     doc = self.nlp(text)
     tokens = [token.text.strip() for token in doc]
     # combine: 'semi', '-', 'optimized' -> 'semi-optimized'
@@ -237,6 +252,7 @@ class SemEval2017Dataset(KeywordDataset):
     tokens = tmp
     # replace numbers with symbol
     tokens = [self.RE_NUMBERS.sub(self.RE_NUMBERS_SUB, token) for token in tokens]
+    tokens = [self.RE_OTHERS.sub(self.RE_OTHERS_SUB, token) for token in tokens]
     # lemmatize
     if self.lemmatize:
       tokens = [self.wn.lemmatize(x) for x in tokens]
