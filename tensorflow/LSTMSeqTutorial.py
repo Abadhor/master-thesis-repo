@@ -9,7 +9,7 @@ random.seed(10)
 
 # data path
 PATH = "./data/"
-"""
+#"""
 TEST = "test_seq_data.pickle"
 DEV = "dev_seq_data.pickle"
 TRAIN = "train_seq_data.pickle"
@@ -22,8 +22,8 @@ TMP_MODEL = "./tmp/model.ckpt"
 BEST_MODEL = "./models/best_model.session"
 
 # model parameters
-#sent_length = 10
-sent_length = 20
+sent_length = 10
+#sent_length = 20
 hidden_size = 5
 vocab_size = 9
 num_classes = 3
@@ -33,7 +33,7 @@ LSTM_layer_count = 1
 # training parameters
 num_epochs = 100
 early_stopping_epoch_limit = 10
-starter_learning_rate = 0.1
+starter_learning_rate = 0.01
 decay_steps = 100
 decay_rate = 0.96
 
@@ -126,6 +126,8 @@ outputs, final_state = tf.nn.dynamic_rnn(multi_lstm_cells, sentences, dtype=tf.f
 
 # Create a weight matrix + bias layer
 # Applies the matrix to every output of the LSTM layer
+# input shape [batch_size, sent_length, input_depth] -->
+# output shape [batch_size, sent_length, output_depth]
 def linearLayer(input_, input_depth, output_depth, name):
   cur_batch_size = tf.shape(input_)[0]
   with tf.variable_scope(name):
@@ -158,8 +160,10 @@ sent_decoded = tf.argmax(sentences,2)
 pred_classes = tf.argmax(classes,2)
 true_classes = tf.argmax(labels,2)
 correct_prediction = tf.cast(tf.equal(pred_classes, true_classes), tf.float32)
+
 # ensure that results outside the sequence length are 0
 correct_prediction = tf.multiply(correct_prediction, seq_len_mask)
+
 # calculate accuracy only for the part in the sequence
 # that is part of the sentence
 sent_sum = tf.reduce_sum(correct_prediction,1)
@@ -238,7 +242,12 @@ best_epoch = 0
 for ep in range(0,num_epochs):
   batches_sent, batches_labels = createBatches(train_data, train_labels, num_batches, batch_size_last)
   for b in range(0,num_batches):
-    data = {sentences: batches_sent[b], labels: batches_labels[b], dictionary:train['dictionary'], label_names:train['label_names']}
+    data = {
+      sentences: batches_sent[b],
+      labels: batches_labels[b],
+      dictionary:train['dictionary'],
+      label_names:train['label_names']
+    }
     # TODO: replace this list of variables with dictionary
     _, loss_value_train, accuracy_value_train, sentence_accuracy_value_train, a1, a2, a3, a4 = session.run([train_step, loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask, pred_classes,true_classes], feed_dict=data)
     if (step % 50000 == 0):
@@ -248,8 +257,13 @@ for ep in range(0,num_epochs):
       printSent(a1[0],a2[0],a3[0],a4[0])
     step += 1
   # validation on dev set
-  data_testing = {sentences: dev_data, labels: dev_labels}
-  loss_value_dev, accuracy_value_dev, sentence_accuracy_value_dev, a1, a2, a3, a4 = session.run([loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask,pred_classes,true_classes], feed_dict=data)
+  data_dev = {
+    sentences: dev_data,
+    labels: dev_labels,
+    dictionary:dev['dictionary'],
+    label_names:dev['label_names']
+  }
+  loss_value_dev, accuracy_value_dev, sentence_accuracy_value_dev, a1, a2, a3, a4 = session.run([loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask,pred_classes,true_classes], feed_dict=data_dev)
   print("Devset loss at Epoch", ep, ":", loss_value_dev)
   print("Devset accuracy: {:.3%}".format(accuracy_value_dev))
   print("Devset sentence accuracy: {:.3%}".format(sentence_accuracy_value_dev))
@@ -274,8 +288,13 @@ print("Best sentence accuracy: {:.3%}".format(best_sent_accuracy))
 print("Validating on test set...")
 saver.restore(session, TMP_MODEL)
 print("Model restored.")
-data_testing = {sentences: test_data, labels: test_labels}
-loss_value_test, accuracy_value_test, sentence_accuracy_value_test, a1, a2, a3, a4 = session.run([loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask,pred_classes,true_classes], feed_dict=data)
+data_testing = {
+  sentences: test_data,
+  labels: test_labels,
+  dictionary:test['dictionary'],
+  label_names:test['label_names']
+}
+loss_value_test, accuracy_value_test, sentence_accuracy_value_test, a1, a2, a3, a4 = session.run([loss, accuracy, sentence_accuracy, sent_decoded, seq_len_mask,pred_classes,true_classes], feed_dict=data_testing)
 print("Test set loss at Epoch", best_epoch, ":", loss_value_test)
 print("Test set accuracy: {:.3%}".format(accuracy_value_test))
 print("Test set sentence accuracy: {:.3%}".format(sentence_accuracy_value_test))

@@ -5,7 +5,6 @@ from MWUHashTree import MWUHashTree
 import numpy as np
 import spacy
 
-SENT_MAX_LEN = 150
 UNKNOWN_TOKEN = '????'
 LB_BEGINNING = 'B'
 LB_INSIDE = 'I'
@@ -21,6 +20,7 @@ class SemEval2017Collection():
     self.verbose = verbose
     # if dictionary remains none, use train dictionary
     self.dictionary = None
+    self.max_length = None
     self.nlp = spacy.load('en_core_web_md')
     self.train = SemEval2017Dataset(spacyNLP = self.nlp)
     self.dev = SemEval2017Dataset(spacyNLP = self.nlp)
@@ -55,10 +55,24 @@ class SemEval2017Collection():
     return LABEL_DICT
   
   def getInverseDictionary(self):
-    return {v:k for k, v in self.dictionary.items()}
+    ret = [0] * len(self.dictionary)
+    items = self.dictionary.items()
+    for k, v in items:
+      ret[v] = k
+    return ret
   
   def getInverseLabelDict(self):
-    return {v:k for k, v in LABEL_DICT.items()}
+    return LABEL_NAMES
+  
+  def getSentenceLength(self):
+    if not self.max_length:
+      maxes = [
+        max([len(s) for s in self.train.corpus]), 
+        max([len(s) for s in self.dev.corpus]),
+        max([len(s) for s in self.test.corpus])
+      ]
+      self.max_length = max(maxes)
+    return self.max_length
   
   def createLabels(self, ds):
     """ Create labels for all sentences in the corpus """
@@ -127,8 +141,9 @@ class SemEval2017Collection():
     return kwds
   
   def encode(self, corpus, labels):
-    x = np.zeros((len(corpus),SENT_MAX_LEN), dtype='int32')
-    y = np.zeros((len(corpus),SENT_MAX_LEN), dtype='int32')
+    x = np.zeros((len(corpus),self.getSentenceLength()), dtype='int32')
+    y = np.zeros((len(corpus),self.getSentenceLength()), dtype='int32')
+    lengths = np.zeros((len(corpus)), dtype='int32')
     for s_idx, s in enumerate(corpus):
       for t_idx, t in enumerate(s):
         token = t
@@ -136,7 +151,8 @@ class SemEval2017Collection():
           token = UNKNOWN_TOKEN
         x[s_idx,t_idx] = self.dictionary[token]
         y[s_idx,t_idx] = LABEL_DICT[labels[s_idx][t_idx]]
-    return x, y
+      lengths[s_idx] = len(s)
+    return x, y, lengths
         
     
     

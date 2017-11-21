@@ -16,9 +16,9 @@ collection = SemEval2017Collection(TRAIN_FOLDER, DEV_FOLDER, TEST_FOLDER, verbos
 collection.setDictionary()
 
 def save(ds, labels, path):
-  data, labels = collection.encode(ds.corpus, labels)
+  data, labels, lengths = collection.encode(ds.corpus, labels)
   with io.open(path, "wb") as fp:
-    pickle.dump({"data":data, "labels":labels}, fp)
+    pickle.dump({"data":data, "labels":labels, "lengths":lengths}, fp)
 
 
 
@@ -27,6 +27,8 @@ save(collection.dev, collection.dev_labels, PATH+DEV)
 save(collection.test, collection.test_labels, PATH+TEST)
 
 with io.open(PATH+META, "wb") as fp:
-    pickle.dump({"invDict":collection.getInverseDictionary(),
-                 "labelNames":collection.getInverseLabelDict()}, fp)
+    pickle.dump({"sent_length": collection.getSentenceLength(),
+                 "invDict":collection.getInverseDictionary(),
+                 "labelNames":collection.getInverseLabelDict(),
+                 "labelDict":collection.getLabelDict()}, fp)
 
