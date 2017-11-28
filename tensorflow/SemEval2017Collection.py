@@ -41,12 +41,22 @@ class SemEval2017Collection():
     
   
   def setDictionary(self, dictionary=None):
-    if not dictionary:
+    hasInput = (dictionary != None)
+    if not hasInput:
       dictionary = self.train.getDictionary()
     dic_ls = list(dictionary.keys())
     ordered_dic = {dic_ls[i]:i for i in range(len(dic_ls))}
-    ordered_dic[UNKNOWN_TOKEN] = len(ordered_dic)
+    special = self.train.getSpecialTokens()
+    for s in special:
+      if s not in ordered_dic:
+        ordered_dic[s] = len(ordered_dic)
     self.dictionary = ordered_dic
+    print("Train")
+    self.train.setDictionary(ordered_dic)
+    print("Dev")
+    self.dev.setDictionary(ordered_dic)
+    print("Test")
+    self.test.setDictionary(ordered_dic)
   
   def getDictionary(self):
     return self.dictionary

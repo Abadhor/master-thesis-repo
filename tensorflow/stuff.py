@@ -109,7 +109,20 @@ print(MWTs)
 
 
 
-
+"""
+DECORATOR
+>>> def some_bs(func):
+...   def bs(text):
+...     return "bs"
+...   return bs
+...
+>>> @some_bs
+... def hello(text):
+...   return "Hello " + text
+...
+>>> hello("World")
+'bs'
+"""
 
 
 """

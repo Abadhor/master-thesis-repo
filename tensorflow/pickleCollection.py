@@ -1,6 +1,7 @@
 import io
 import pickle
-from SemEval2017Collection import SemEval2017Collection
+from gensim.models.word2vec import Word2Vec
+from SemEval2017Collection import SemEval2017Collection 
 
 PATH = "./data/"
 TEST = "test_sem2017.pickle"
@@ -8,12 +9,17 @@ DEV = "dev_sem2017.pickle"
 TRAIN = "train_sem2017.pickle"
 META = "meta_sem2017.pickle"
 
-TRAIN_FOLDER = "D:\\Uni\\MasterThesis\\Data\\SemEval2017_AutomaticKeyphraseExtraction\\scienceie2017_train\\train2\\"
+WORD2VEC = "D:/data/other/wikipedia/300-2/skipgram.model"
+TRAIN_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/scienceie2017_train/train2/"
 DEV_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/scienceie2017_dev/dev/"
 TEST_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/semeval_articles_test/"
 
+model = Word2Vec.load(WORD2VEC)
+dictionary = model.wv.vocab
+dictionary = {k:v.count for k, v in dictionary.items()}
+
 collection = SemEval2017Collection(TRAIN_FOLDER, DEV_FOLDER, TEST_FOLDER, verbose=True)
-collection.setDictionary()
+collection.setDictionary(dictionary)
 
 def save(ds, labels, path):
   data, labels, lengths = collection.encode(ds.corpus, labels)

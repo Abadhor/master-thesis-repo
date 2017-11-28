@@ -29,12 +29,6 @@ class SemEval2017Dataset(KeywordDataset):
     self.RE_REF = re.compile(r'\[[\d\W]*?\]')
     self.RE_FIG = re.compile(r'[F|f]igs?\. *\d+')
     self.RE_NEWLINE = re.compile(r'\n')
-    self.RE_OTHERS = re.compile(r'[^a-zA-Z0-9\. ,\/#!$%\^&\*;:{}=\-_`~()\+\[\]]+')
-    self.RE_OTHERS_SUB = '§§§§'
-    self.RE_NUMBERS = re.compile(r'^[-]?[\d]+[\W\d]*$')
-    self.RE_NUMBERS_SUB = '$$$$'
-    self.RE_DASH = re.compile(r'\s-\s')
-    self.RE_DASH_SUB = ' -- '
     self.RE_ET_AL = re.compile(r' et al\.')
     self.RE_ET_AL_SUB = ' et al'
     self.RE_CA = re.compile(r' ca\.')
@@ -223,36 +217,10 @@ class SemEval2017Dataset(KeywordDataset):
   
   def word_tokenize_Spacy(self, text):
     """Enhance spacy tokenization"""
-    text = text.replace(chr(8211), '-')
-    text = text.replace('"', '')
-    text = text.replace('“', '')
-    text = text.replace('”', '')
-    text = self.RE_DASH.sub(self.RE_DASH_SUB, text)
+    text = self.preprocess(text, toLower=True, doubleDash=True)
     doc = self.nlp(text)
     tokens = [token.text.strip() for token in doc]
-    # combine: 'semi', '-', 'optimized' -> 'semi-optimized'
-    tmp = []
-    minus = False
-    prev = -1
-    for i in range(len(tokens)):
-      if not minus:
-        if tokens[i] != '-':
-          tmp.append(tokens[i])
-          prev += 1
-        else:
-          if prev == -1:
-            tmp.append(tokens[i])
-            prev += 1
-          else:
-            tmp[prev] = tmp[prev] + tokens[i]
-            minus = True
-      else:
-        tmp[prev] = tmp[prev] + tokens[i]
-        minus = False
-    tokens = tmp
-    # replace numbers with symbol
-    tokens = [self.RE_NUMBERS.sub(self.RE_NUMBERS_SUB, token) for token in tokens]
-    tokens = [self.RE_OTHERS.sub(self.RE_OTHERS_SUB, token) for token in tokens]
+    tokens = self.postprocess(tokens, removeHyphens=True)
     # lemmatize
     if self.lemmatize:
       tokens = [self.wn.lemmatize(x) for x in tokens]
