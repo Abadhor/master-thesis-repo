@@ -151,6 +151,9 @@ class SemEval2017Collection():
     return kwds
   
   def encode(self, corpus, labels):
+    # 1. Create array with dictionary indices for each word in each sentence
+    # 2. Create array with label indices for each word in each sentence
+    # 3. Create array with sentence lengths for each sentence
     x = np.zeros((len(corpus),self.getSentenceLength()), dtype='int32')
     y = np.zeros((len(corpus),self.getSentenceLength()), dtype='int32')
     lengths = np.zeros((len(corpus)), dtype='int32')

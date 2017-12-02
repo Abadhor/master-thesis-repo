@@ -8,7 +8,7 @@ import random
 
 class EntityModel_BoW:
   
-  def __init__(self, params):
+  def __init__(self, params, useBOW=False):
     self.session = tf.Session()
     # implement exponential learning rate decay
     # optimizer gets called with this learning_rate and updates
@@ -18,12 +18,13 @@ class EntityModel_BoW:
     # the placeholder for sentences has first dimension batch_size for each
     # sentence in a batch,
     # second dimension sent_length for each word in the sentence.
+    # Each word is represented by its index in the dictionary
     # Note that we use 'None' instead of batch_size for the first dimsension.
     # This allows us 
     # to deal with variable batch sizes
     self.sentences = tf.placeholder(tf.int32, [None, params['sent_length']], name="sentences")
     # one hot encoding
-    sent_one_hot = tf.one_hot(self.sentences, params['vocab_size'], axis=-1, name="sent_one_hot")
+    #sent_one_hot = tf.one_hot(self.sentences, params['vocab_size'], axis=-1, name="sent_one_hot")
     
     # the placeholder for labels has first dimension batch_size for each
     # sentence in a batch and
@@ -50,37 +51,52 @@ class EntityModel_BoW:
     # placeholder for the label_names
     self.label_names = tf.placeholder(tf.string, [params['num_classes']], name="label_names")
     
+    # word embeddings
+    wv_shape = params['word_embeddings'].shape
+    word_embeddings = tf.get_variable("word_embeddings",shape=wv_shape, trainable=False)
+    embedding_placeholder = tf.placeholder(tf.float32, shape=wv_shape)
+    init_embeddings = tf.assign(word_embeddings, embedding_placeholder)
+    embedded_word_ids = tf.nn.embedding_lookup(word_embeddings, self.sentences)
+    
     # dense input matrix
     
-    lstm_inputs = self.linearLayerTiled(sent_one_hot, params['vocab_size'], params['dense_hidden_size'], "lstm_input")
+    #lstm_inputs = self.linearLayerTiled(sent_one_hot, params['vocab_size'], params['dense_hidden_size'], "lstm_input")
     
-    layer1 = self.createBiDirectionalLSTMLayer(lstm_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1')
+    
+    layer1 = self.createBiDirectionalLSTMLayer(embedded_word_ids, params['hidden_size'], self.sent_lengths, 'LSTM_l1')
     
     layer2 = self.createBiDirectionalLSTMLayer(layer1, params['hidden_size'], self.sent_lengths, 'LSTM_l2')
     
     # pass the final state into this linear function to multiply it 
     # by the weights and add bias to get our output.
-    # Shape of classes is [batch_size, sent_length, num_classes]
-    classes = self.linearLayerTiled(layer2, 2*params['hidden_size'], params['num_classes'], "output")
+    # Shape of class_scores is [batch_size, sent_length, num_classes]
+    class_scores = self.linearLayerTiled(layer2, 2*params['hidden_size'], params['num_classes'], "output")
     
     # define our loss function.
-    loss = tf.nn.softmax_cross_entropy_with_logits(logits=classes, labels=lbl_one_hot)
+    #loss = tf.nn.softmax_cross_entropy_with_logits(logits=class_scores, labels=lbl_one_hot)
+    
+    # Compute the log-likelihood of the gold sequences and keep the transition
+    # params for inference at test time.
+    log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(
+        class_scores, self.labels, self.sent_lengths)
     
     # our loss with softmax_cross_entropy_with_logits gives us a loss for each word 
     # in each sentence.  We take the sum of all losses per sentence.
-    loss = tf.reduce_sum(loss, axis=1)
+    #loss = tf.reduce_sum(loss, axis=1)
     
     # our loss with softmax_cross_entropy_with_logits gives us a loss for each 
     # example in the batch.  We take the mean of all these losses.
-    self.loss = tf.reduce_mean(loss)
+    #self.loss = tf.reduce_mean(loss)
+    
+    self.loss = tf.reduce_mean(-log_likelihood)
     
     # calculate accuracy of word class predictions
     # first gather the indices of the highest results
-    # since the classes and words are one-hot encoded,
+    # since the class_scores and words are one-hot encoded,
     # this gives us the id of the class
-    sent_decoded = tf.argmax(sent_one_hot,2)
-    self.pred_classes = tf.argmax(classes,2)
-    true_classes = tf.argmax(lbl_one_hot,2)
+    #sent_decoded = tf.argmax(sent_one_hot,2)
+    self.pred_classes = tf.argmax(class_scores,2, output_type=tf.int32)
+    true_classes = self.labels
     correct_prediction = tf.cast(tf.equal(self.pred_classes, true_classes), tf.float32)
     
     # ensure that results outside the sequence length are 0
@@ -99,7 +115,7 @@ class EntityModel_BoW:
     # decode sentences into readable words and labels
     # lookup the string of the ID of the words and classes
     # in the word dictionary and label name dictionary
-    sent_decoded = tf.gather(self.dictionary, sent_decoded)
+    #sent_decoded = tf.gather(self.dictionary, sent_decoded)
     pred_classes_names = tf.gather(self.label_names, self.pred_classes)
     true_classes = tf.gather(self.label_names, true_classes)
     
@@ -115,7 +131,7 @@ class EntityModel_BoW:
 
     # run init_op
     init_op.run(session=self.session)
-    
+    self.session.run(init_embeddings, feed_dict={embedding_placeholder: params['word_embeddings']})
   
   def closeSession(self):
     self.session.close()
@@ -139,7 +155,7 @@ class EntityModel_BoW:
     _, loss_value, accuracy_value, sentence_accuracy_value = self.session.run([self.train_step, self.loss, self.accuracy, self.sentence_accuracy], feed_dict=data)
     return loss_value, accuracy_value, sentence_accuracy_value
   
-  def predict(self, data):
+  def run(self, data, train=False):
     data = {
         self.sentences: data['sentences'],
         self.labels: data['labels'],
@@ -147,8 +163,15 @@ class EntityModel_BoW:
         self.dictionary: data['dictionary'],
         self.label_names: data['label_names']
     }
-    loss_value, accuracy_value, sentence_accuracy_value, prediction = self.session.run([self.loss, self.accuracy, self.sentence_accuracy,self.pred_classes], feed_dict=data)
-    return loss_value, accuracy_value, sentence_accuracy_value, prediction
+    fetches = {
+      'loss_value':self.loss,
+      'accuracy_value':self.accuracy,
+      'sentence_accuracy_value':self.sentence_accuracy,
+      'prediction':self.pred_classes
+    }
+    if train:
+      fetches['train_step'] = self.train_step
+    return self.session.run(fetches, feed_dict=data)
   
   def saveModel(self, path):
     return self.saver.save(self.session, path)
