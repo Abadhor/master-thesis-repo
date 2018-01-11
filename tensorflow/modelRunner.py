@@ -4,21 +4,8 @@ import pickle
 import numpy as np
 import io
 import random
-from EntityModel_BoW import EntityModel_BoW
+from EntityModel import EntityModel
 
-
-"""
-TODO:
-evaluate with function
-single sentences
-check % of sentences fully correct
-count number of precise MWT matches
-compare with expected number of MWTs
-check invalid labeling eg "BOL"
-count number of wrongly predicted MWTs
--> MWTs with boundary mismatches
-do evaluation on index level
-"""
 
 random.seed(10)
 
@@ -39,12 +26,18 @@ with io.open(PATH+META, "rb") as fp:
 params = {}
 # model parameters
 params['sent_length'] = meta['sent_length']
-#sent_length = 20
+params['word_length'] = meta['word_length']
 params['hidden_size'] = 350
-params['dense_hidden_size'] = 300
+params['bow_feature_size'] = 100
+params['boc_feature_size'] = 21
+params['char_cnn_filter_width'] = 3
+params['char_cnn_out_features'] = 32
+params['char_dense_out_features'] = 50
 params['vocab_size'] = len(meta['invDict'])
+params['alphabet_size'] = len(meta['alphabet']) + 1
 params['num_classes'] = len(meta['labelNames'])
 params['word_embeddings'] = meta['word_vectors']
+params['no_vector_count'] = meta['no_vector_count']
 batch_size = 64
 LSTM_layer_count = 1
 batch_testing = True
@@ -54,6 +47,7 @@ batch_testing = True
 num_epochs = 200
 early_stopping_epoch_limit = 20
 params['starter_learning_rate'] = 0.01
+params['l2-coefficient'] = 0.01
 params['decay_steps'] = 100
 params['decay_rate'] = 0.96
 
@@ -88,35 +82,33 @@ else:
   num_batches += 1
 """
 # create batches, randomizing the order of the samples
-def createBatches(data, labels, lengths, batch_size, randomize=True):
+def createBatches(dataset, batch_size, randomize=True):
   # define the number of batches
-  num_batches = len(data) // batch_size
-  if len(data) % batch_size == 0:
+  num_batches = len(dataset['data']) // batch_size
+  if len(dataset['data']) % batch_size == 0:
     batch_size_last = batch_size
   else:
-    batch_size_last = len(data) - (num_batches * batch_size)
+    batch_size_last = len(dataset['data']) - (num_batches * batch_size)
     num_batches += 1
   
   # create batches
-  batches_sent = []
-  batches_labels = []
-  batches_lengths = []
-  b_idx = [x for x in range(0,len(data))]
+  batches = {}
+  for k in dataset.keys():
+    batches[k] = []
+  b_idx = [x for x in range(0,len(dataset['data']))]
   if randomize:
     random.shuffle(b_idx)
   offset = 0
   for b in range(0, num_batches-1):
     cur_b_idx = b_idx[offset:(offset+batch_size)]
-    batches_sent.append([data[x] for x in cur_b_idx])
-    batches_labels.append([labels[x] for x in cur_b_idx])
-    batches_lengths.append([lengths[x] for x in cur_b_idx])
+    for k in dataset.keys():
+      batches[k].append([dataset[k][x] for x in cur_b_idx])
     offset += batch_size
   
   cur_b_idx = b_idx[offset:(offset+batch_size_last)]
-  batches_sent.append([data[x] for x in cur_b_idx])
-  batches_labels.append([labels[x] for x in cur_b_idx])
-  batches_lengths.append([lengths[x] for x in cur_b_idx])
-  return batches_sent, batches_labels, batches_lengths
+  for k in dataset.keys():
+      batches[k].append([dataset[k][x] for x in cur_b_idx])
+  return batches
 
 def getMWTs(sentence):
   # get MWTs in s
@@ -150,9 +142,9 @@ def getScores(TP,FP,FN):
   F1 = 2*TP /(2*TP+FP+FN)
   return precision, recall, F1
 
-def runBatches(batches_sent, batches_labels, batches_lengths, train=False):
+def runBatches(batches, train=False):
   # batch validation
-  num_samples = sum([len(b) for b in batches_sent])
+  num_samples = sum([len(b) for b in batches['data']])
   losses = 0
   accuracies = 0
   s_accuracies = 0
@@ -161,29 +153,31 @@ def runBatches(batches_sent, batches_labels, batches_lengths, train=False):
   TP_count = 0
   FP_count = 0
   count_dict = {x:0 for x in meta['labelNames']}
-  for b in range(len(batches_sent)):
-    print("Batch:",b+1, '/', len(batches_sent), end='\r')
+  for b in range(len(batches['data'])):
+    print("Batch:",b+1, '/', len(batches['data']), end='\r')
     data = {
-      'sentences': batches_sent[b],
-      'labels': batches_labels[b],
-      'sent_lengths': batches_lengths[b],
+      'sentences': batches['data'][b],
+      'labels': batches['labels'][b],
+      'sent_lengths': batches['lengths'][b],
+      'sentence_chars': batches['chars'][b],
+      'word_lengths': batches['word_lengths'][b],
       'dictionary': meta['invDict'],
       'label_names': meta['labelNames']
     }
     fetched = clf.run(data, train=train)
-    losses += fetched['loss_value'] * len(batches_sent[b])
-    accuracies += fetched['accuracy_value'] * len(batches_sent[b])
-    s_accuracies += fetched['sentence_accuracy_value'] * len(batches_sent[b])
+    losses += fetched['loss_value'] * len(batches['data'][b])
+    accuracies += fetched['accuracy_value'] * len(batches['data'][b])
+    s_accuracies += fetched['sentence_accuracy_value'] * len(batches['data'][b])
     # find ground truth for each sentence and evaluate predictions
-    for idx,s in enumerate(batches_labels[b]):
+    for idx,s in enumerate(batches['labels'][b]):
       GT_list = getMWTs(s)
       GT_count += len(GT_list)
       GT_set = set()
       for mwt in GT_list:
         GT_set.add(mwt)
-      pred_s = fetched['prediction'][idx]
+      pred_s = fetched['crf_decode'][idx]
       predictions = getMWTs(pred_s)
-      countLabels(pred_s, batches_lengths[b][idx], count_dict)
+      countLabels(pred_s, batches['lengths'][b][idx], count_dict)
       for mwt in predictions:
         #print(mwt, end=" ")
         if mwt in GT_set:
@@ -207,7 +201,7 @@ def runBatches(batches_sent, batches_labels, batches_lengths, train=False):
   return performance
   
 
-with EntityModel_BoW(params) as clf:
+with EntityModel(params, word_features='emb') as clf:
   # we'll train with batches of size 128.  This means that we run 
   # our model on 128 examples and then do gradient descent based on the loss
   # over those 128 examples.
@@ -220,10 +214,8 @@ with EntityModel_BoW(params) as clf:
   best_epoch = 0
   
   for ep in range(0,num_epochs):
-    batches_sent_train, batches_labels_train, batches_lengths_train = createBatches(
-    train_data, train_labels, train_lengths,
-    batch_size)
-    performance = runBatches(batches_sent_train, batches_labels_train, batches_lengths_train, train=True)
+    batches_train = createBatches(train, batch_size)
+    performance = runBatches(batches_train, train=True)
     print("Train loss at Epoch", ep, ":", performance['loss'])
     print("Train label counts: ", performance['label_counts'])
     print("Train accuracy: {:.3%}".format(performance['accuracy']))
@@ -232,9 +224,8 @@ with EntityModel_BoW(params) as clf:
     print("Train recall: {:.3%}".format(performance['recall']))
     print("Train F1: {:.3%}".format(performance['F1']))
     print("                                                ", end='\r')
-    batches_sent_dev, batches_labels_dev, batches_lengths_dev = createBatches(
-    dev_data, dev_labels, dev_lengths, batch_size, randomize=False)
-    performance = runBatches(batches_sent_dev, batches_labels_dev, batches_lengths_dev)
+    batches_dev = createBatches(dev, batch_size, randomize=False)
+    performance = runBatches(batches_dev)
     print("Devset loss at Epoch", ep, ":", performance['loss'])
     print("Devset label counts: ", performance['label_counts'])
     print("Devset accuracy: {:.3%}".format(performance['accuracy']))
@@ -264,9 +255,8 @@ with EntityModel_BoW(params) as clf:
   print("Validating on test set...")
   clf.restoreModel(TMP_MODEL)
   print("Model restored.")
-  batches_sent_test, batches_labels_test, batches_lengths_test = createBatches(
-  test_data, test_labels, test_lengths, batch_size, randomize=False)
-  performance = runBatches(batches_sent_test, batches_labels_test, batches_lengths_test)
+  batches_test = createBatches(test, batch_size, randomize=False)
+  performance = runBatches(batches_test)
   print("Testset loss at Epoch", best_epoch, ":", performance['loss'])
   print("Testset label counts: ", performance['label_counts'])
   print("Testset accuracy: {:.3%}".format(performance['accuracy']))

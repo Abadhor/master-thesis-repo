@@ -15,6 +15,8 @@ TRAIN_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtractio
 DEV_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/scienceie2017_dev/dev/"
 TEST_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/semeval_articles_test/"
 
+WORD_MAX_LEN = 16
+
 model = Word2Vec.load(WORD2VEC)
 dictionary = model.wv.vocab
 dictionary = {k:v.count for k, v in dictionary.items()}
@@ -23,9 +25,15 @@ collection = SemEval2017Collection(TRAIN_FOLDER, DEV_FOLDER, TEST_FOLDER, verbos
 collection.setDictionary(dictionary)
 
 def save(ds, labels, path):
-  data, labels, lengths = collection.encode(ds.corpus, labels)
+  chars, word_lengths = collection.encodeCharacters(ds.corpus, WORD_MAX_LEN)
+  data, labels, lengths = collection.encode(ds.corpus_unk, labels)
   with io.open(path, "wb") as fp:
-    pickle.dump({"data":data, "labels":labels, "lengths":lengths}, fp)
+    pickle.dump({"data":data,
+                 "labels":labels,
+                 "lengths":lengths,
+                 "chars":chars,
+                 "word_lengths":word_lengths
+                }, fp)
 
 
 
@@ -36,9 +44,10 @@ save(collection.test, collection.test_labels, PATH+TEST)
 
 # create matrix with word embeddings, indexed based on the collection dictionary
 invDict = collection.getInverseDictionary()
-word_vectors = np.zeros((len(invDict),model.wv.syn0.shape[1]))
-for i in range(len(invDict)):
-  print("Vector:", i+1, "/", len(invDict), end='\r')
+no_vector_count = len(invDict) - model.wv.syn0.shape[0]
+word_vectors = np.zeros(model.wv.syn0.shape)
+for i in range(model.wv.syn0.shape[0]):
+  print("Vector:", i+1, "/", model.wv.syn0.shape[0], end='\r')
   word = invDict[i]
   if word in model.wv:
     v = model.wv[word].reshape((1,model.wv.syn0.shape[1]))
@@ -53,5 +62,8 @@ with io.open(PATH+META, "wb") as fp:
                  "invDict":invDict,
                  "labelNames":collection.getInverseLabelDict(),
                  "labelDict":collection.getLabelDict(),
-                 "word_vectors":word_vectors}, fp)
+                 "alphabet":collection.getAlphabet(),
+                 "word_length": WORD_MAX_LEN,
+                 "word_vectors":word_vectors,
+                 "no_vector_count": no_vector_count}, fp)
 

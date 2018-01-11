@@ -5,7 +5,7 @@ from MWUHashTree import MWUHashTree
 import numpy as np
 import spacy
 
-UNKNOWN_TOKEN = '????'
+UNKNOWN_TOKEN = '??'
 LB_BEGINNING = 'B'
 LB_INSIDE = 'I'
 LB_LAST = 'L'
@@ -20,6 +20,7 @@ class SemEval2017Collection():
     self.verbose = verbose
     # if dictionary remains none, use train dictionary
     self.dictionary = None
+    self.alphabet = None
     self.max_length = None
     self.nlp = spacy.load('en_core_web_md')
     self.train = SemEval2017Dataset(spacyNLP = self.nlp)
@@ -27,6 +28,7 @@ class SemEval2017Collection():
     self.test = SemEval2017Dataset(spacyNLP = self.nlp)
     # init datasets
     self.initDS(self.train, trainPath)
+    self.alphabet = self.train.getAlphabet()
     self.initDS(self.dev, devPath)
     self.initDS(self.test, testPath)
     self.train_labels = self.createLabels(self.train)
@@ -149,6 +151,22 @@ class SemEval2017Collection():
             raise NameError("Out of Bounds")
           cur += 1
     return kwds
+  
+  def getAlphabet(self):
+    return self.alphabet
+  
+  def encodeCharacters(self, corpus, maxWordLength):
+    x = np.full((len(corpus),self.getSentenceLength(),maxWordLength), len(self.alphabet), dtype='int32')
+    lengths = np.zeros((len(corpus), self.getSentenceLength()), dtype='int32')
+    for s_idx, s in enumerate(corpus):
+      for t_idx, t in enumerate(s):
+        token = t
+        for c_idx, c in enumerate(token):
+          if (c_idx >= maxWordLength):
+            break
+          x[s_idx, t_idx, c_idx] = self.alphabet.index(c)
+        lengths[s_idx, t_idx] = min(len(token), maxWordLength)
+    return x, lengths
   
   def encode(self, corpus, labels):
     # 1. Create array with dictionary indices for each word in each sentence

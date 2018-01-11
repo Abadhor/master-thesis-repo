@@ -1,5 +1,6 @@
-
+import string
 import re
+import copy
 
 class TextDataset:
   
@@ -7,23 +8,25 @@ class TextDataset:
     self.text_files = None
     self.corpus = None
     self.dictionary = None
-    self.RE_OTHERS = re.compile(r'[^a-zA-Z0-9\. ,\/#!$%\^&\*;:{}=\-_`~()\+\[\]]+')
-    self.RE_OTHERS_SUB = '§§§§'
+    self.alphabet = string.printable[:95] + '§'
+    #self.RE_OTHERS = re.compile(r'[^a-zA-Z0-9\. ,\/#!$%\^&\*;:{}=\-_`~()\+\[\]]+')
+    self.RE_OTHERS = re.compile('[^'+re.escape(self.alphabet)+']')
+    self.RE_OTHERS_SUB = '§'
     self.RE_NUMBERS = re.compile(r'^[-]?[\d]+[\W\d]*$')
-    self.RE_NUMBERS_SUB = '$$$$'
+    self.RE_NUMBERS_SUB = '$$'
     self.RE_DASH = re.compile(r'\s-\s')
     self.RE_DASH_SUB = ' -- '
     self.BRACKETS_B = set()
     self.BRACKETS_B.add('(')
     self.BRACKETS_B.add('[')
     self.BRACKETS_B.add('{')
-    self.BRACKETS_B_SUB = '[[[['
+    self.BRACKETS_B_SUB = '[['
     self.BRACKETS_L = set()
     self.BRACKETS_L.add(')')
     self.BRACKETS_L.add(']')
     self.BRACKETS_L.add('}')
-    self.BRACKETS_L_SUB = ']]]]'
-    self.UNKNOWN = '????'
+    self.BRACKETS_L_SUB = ']]'
+    self.UNKNOWN = '??'
   
   def getSpecialTokens(self):
     return ['.', ',', ';', self.RE_NUMBERS_SUB, self.RE_OTHERS_SUB, self.RE_DASH_SUB,
@@ -106,7 +109,7 @@ class TextDataset:
     return tokens
   
   def replaceUnknownTokens(self):
-    corpus = self.getCorpus()
+    corpus = copy.deepcopy(self.getCorpus())
     dictionary = self.getDictionary()
     unknown_count = 0
     token_count = 0
@@ -119,6 +122,7 @@ class TextDataset:
           unknown_count += 1
     print("Unknown Tokens:")
     print("{} / {} ({:.2%})".format(unknown_count,token_count,unknown_count/token_count))
+    self.corpus_unk = corpus
   
   def getDictionary(self):
     if not self.dictionary:
@@ -130,6 +134,8 @@ class TextDataset:
       self.tokenize()
     self.dictionary = dictionary
     self.replaceUnknownTokens()
-    
+  
+  def getAlphabet(self):
+    return self.alphabet
     
     

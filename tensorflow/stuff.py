@@ -63,49 +63,26 @@ mask = tf.reduce_max(sentences, 2)
 
 #print(session.run(g))
 
-#BILOU test
-correct = tf.constant([[0,1,3,2,0,1,3,2,0],
-                       [0,1,3,2,0,1,3,2,0]], dtype=tf.int32)
-predictions = tf.constant([[1,3,3,3,2,1,3,2,1],
-                           [1,3,3,3,2,1,3,2,1]], dtype=tf.int32)
+np_emb = np.reshape(np.arange(3*2), (3,2))
 
-B = tf.constant([1], dtype=tf.int32)
+emb= tf.constant(np_emb, dtype=tf.float32)
 
-b_pred = tf.equal(predictions, B)
+indices = [75,76,77,78]
+tokens = tf.constant(indices, dtype=tf.int32)
+limit = tf.constant(76, dtype=tf.int32)
+t2 = tokens - limit
+t3 = tokens * limit
+t_ft = tf.nn.embedding_lookup(emb, t2)
 
-b_idx = tf.where(b_pred)
-
-L = tf.constant([2], dtype=tf.int32)
-
-l_pred = tf.equal(predictions, L)
-
-l_idx = tf.where(l_pred)
-
-l_shape = tf.shape(l_idx)
-b_shape = tf.shape(b_idx)
-
-min_BL = tf.minimum(l_shape, b_shape)
-
-b_slice = tf.slice(b_idx, [0,1], [b_shape[0],1])
-l_slice = tf.slice(l_idx, [0,0], min_BL)
-
-data = {sentences: batch_sent, labels: batch_labels}
 
 #print(session.run(loss, data))
 
-pred, cor = session.run([predictions, correct], data)
-MWTs = []
-for s in range(len(pred)):
-  # get MWTs in s
-  B_idx = None
-  for idx, t in enumerate(pred[s]):
-    if t == 1:
-      B_idx = idx
-    elif t == 2:
-      if B_idx != None:
-        MWTs.append((B_idx,idx))
-      B_idx = None
-print(MWTs)
+data = {sentences: batch_sent, labels: batch_labels}
+
+list = session.run([emb, tokens, t2, t3, t_ft])
+for idx,v in enumerate(list):
+  print(idx,v)
+
 
 
 
