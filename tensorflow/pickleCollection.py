@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 from gensim.models.word2vec import Word2Vec
 from SemEval2017Collection import SemEval2017Collection 
+import options
 
 PATH = "./data/"
 TEST = "test_sem2017.pickle"
@@ -12,12 +13,12 @@ META = "meta_sem2017.pickle"
 LM_DICT = "vocab-2016-09-10.txt"
 LM_DATA = "embeddings_char_cnn.npy"
 
-WORD2VEC = "D:/data/other/wikipedia/300-1/skipgram.model"
-TRAIN_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/scienceie2017_train/train2/"
-DEV_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/scienceie2017_dev/dev/"
-TEST_FOLDER = "D:/Uni/MasterThesis/Data/SemEval2017_AutomaticKeyphraseExtraction/semeval_articles_test/"
-GAZETTEERS_PATH = "D:/data/other/gazetteer/selected-gazetteers.json"
-GAZETTEERS_OUT_PATH = "D:/data/other/gazetteer/used-gazetteers.json"
+WORD2VEC = options.WORD2VEC
+TRAIN_FOLDER = options.TRAIN_FOLDER
+DEV_FOLDER = options.DEV_FOLDER
+TEST_FOLDER = options.TEST_FOLDER
+GAZETTEERS_PATH = options.GAZETTEERS_PATH
+GAZETTEERS_OUT_PATH = options.GAZETTEERS_OUT_PATH
 
 WORD_MAX_LEN = 16
 

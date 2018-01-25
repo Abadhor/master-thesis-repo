@@ -6,6 +6,7 @@
 packages.txt
 */data
 */language_model
+options.py
 
 # IDEs and editors
 /.idea
