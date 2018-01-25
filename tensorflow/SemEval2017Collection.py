@@ -4,6 +4,8 @@ from SemEval2017Dataset import SemEval2017Dataset
 from MWUHashTree import MWUHashTree
 import numpy as np
 import spacy
+import json
+import io
 
 UNKNOWN_TOKEN = '??'
 LB_BEGINNING = 'B'
@@ -40,7 +42,39 @@ class SemEval2017Collection():
     ds.filterUnigramKeywords()
     ds.extractSentences(path, "txt", xml=False, verbose=self.verbose)
     ds.tokenize()
-    
+  
+  def loadGazetteers(self, path):
+    """ Load Gazetteers from file """
+    with io.open(path, "r") as fp:
+      self.gazetteers_list = json.load(fp)
+    self.gazetteers = MWUHashTree()
+    for idx,gaz in enumerate(self.gazetteers_list):
+      self.gazetteers[gaz] = idx
+  
+  def cropGazetteers(self, outPath=None):
+    """ Remove all Gazetteers that could not be found in the training set """
+    print("Crop Gazetteers based on Training set...")
+    corpus = self.train.getCorpus()
+    all_found_ids = set()
+    found_count = 0
+    for s_idx, sentence in enumerate(corpus):
+      for s_token_id in range(len(sentence)):
+        found_gaz = self.gazetteers.getAll(sentence[s_token_id:])
+        found_count += len(found_gaz)
+        for gaz in found_gaz:
+          gaz_id = self.gazetteers[gaz]
+          all_found_ids.add(gaz_id)
+    print("Unique Count:", len(all_found_ids))
+    print("Instance Count:", found_count)
+    self.gazetteers = MWUHashTree()
+    new_list = []
+    for idx,gaz_id in enumerate(all_found_ids):
+      gaz = self.gazetteers_list[gaz_id]
+      self.gazetteers[gaz] = idx
+      new_list.append(gaz)
+    if outPath:
+      with io.open(outPath, "w") as fp:
+        json.dump(new_list, fp)
   
   def setDictionary(self, dictionary=None):
     hasInput = (dictionary != None)
@@ -184,6 +218,26 @@ class SemEval2017Collection():
         y[s_idx,t_idx] = LABEL_DICT[labels[s_idx][t_idx]]
       lengths[s_idx] = len(s)
     return x, y, lengths
-        
-    
+  
+  def encodeGazetteers(self, corpus):
+    """ Encode gazetteer data of the corpus """
+    gaz_data = np.zeros((len(corpus),self.getSentenceLength(),len(self.gazetteers)), dtype='int32')
+    total = 0
+    for s_idx, s in enumerate(corpus):
+      found = self.encodeGazetteersSent(gaz_data, s_idx, s)
+      total += found
+    print("Total:", total)
+    return gaz_data
+  
+  def encodeGazetteersSent(self, gaz_data, s_idx, sentence):
+    """ Encode gazetteer data of a single sentence """
+    total = 0
+    for s_token_id in range(len(sentence)):
+      found_gaz = self.gazetteers.getAll(sentence[s_token_id:])
+      total += len(found_gaz)
+      for gaz in found_gaz:
+        gaz_id = self.gazetteers[gaz]
+        for i in range(len(gaz)):
+          gaz_data[s_idx, s_token_id+i, gaz_id] = 1
+    return total
     

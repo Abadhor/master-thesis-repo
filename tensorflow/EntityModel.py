@@ -16,6 +16,11 @@ class EntityModel:
     global_step = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(params['starter_learning_rate'], global_step, params['decay_steps'], params['decay_rate'])
     
+    
+    # dropout keep probability
+    self.dropout_05 = tf.placeholder(tf.float32, (), name="dropout_05")
+    self.dropout_08 = tf.placeholder(tf.float32, (), name="dropout_08")
+    
     # the placeholder for sentences has first dimension batch_size for each
     # sentence in a batch,
     # second dimension sent_length for each word in the sentence.
@@ -58,6 +63,9 @@ class EntityModel:
     
     self.word_len_mask = tf.sequence_mask(self.word_lengths, maxlen=params['word_length'], dtype=tf.float32)
     
+    # placeholder for the binary gazetteers feature of each word
+    self.gazetteers_binary = tf.placeholder(tf.float32, [None, params['sent_length'], params['gazetteer_count']], name="gazetteers_binary")
+    
     
     # placeholder for the dictionary
     self.dictionary = tf.placeholder(tf.string, [params['vocab_size']], name="invDict")
@@ -89,7 +97,8 @@ class EntityModel:
       raise ValueError('char_features='+char_features)
     
     # char CNN
-    self.token_char_features = self.charCNN(masked_char_embeddings, params)
+    #self.token_char_features = self.simpleCharCNN(masked_char_embeddings, params)
+    self.token_char_features = self.layeredCharCNN(masked_char_embeddings, params)
     
     layer1_inputs = tf.concat([self.token_features, self.token_char_features],
     axis=2, name="layer1_inputs")
@@ -98,17 +107,20 @@ class EntityModel:
     
     layer2 = self.createBiDirectionalLSTMLayer(layer1, params['hidden_size'], self.sent_lengths, 'LSTM_l2')
     
+    # gazetteers layer
+    gazetteers_dense_rs = tf.reshape(self.gazetteers_binary, [tf.shape(self.gazetteers_binary)[0]*params['sent_length'], params['gazetteer_count']],name="gazetteers_dense_rs")
+    gazetteers_dense_activation = tf.tanh(self.linearLayer(gazetteers_dense_rs, params['gazetteer_count'], params['gazetteers_dense_size'], "gazetteers_linear"))
+    gazetteers_dense = tf.reshape(gazetteers_dense_activation, [tf.shape(self.gazetteers_binary)[0], params['sent_length'], params['gazetteers_dense_size']], name="gazetteers_dense_rs2")
+    
+    final_dense_inputs = tf.concat([layer2, gazetteers_dense], axis=2, name="final_dense_inputs")
+    
     # pass the final state into this linear function to multiply it 
     # by the weights and add bias to get our output.
     # Shape of class_scores is [batch_size, sent_length, num_classes]
-    #class_scores = self.linearLayerTiled(layer2, 2*params['hidden_size'], params['num_classes'], "output")
-    class_scores_rs_pre = tf.reshape(layer2, [tf.shape(layer2)[0]*params['sent_length'], 2*params['hidden_size']])
-    class_scores_linear = self.linearLayer(class_scores_rs_pre, 2*params['hidden_size'], params['num_classes'], "output")
-    class_scores = tf.reshape(class_scores_linear, [tf.shape(layer2)[0],params['sent_length'], params['num_classes']])
-    
-    # define our loss function.
-    #loss = tf.nn.softmax_cross_entropy_with_logits(logits=class_scores, labels=lbl_one_hot)
-    
+    class_scores_rs_pre = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']], name="class_scores_rs_pre")
+    class_scores_linear = self.linearLayer(class_scores_rs_pre, 2*params['hidden_size']+params['gazetteers_dense_size'], params['num_classes'], "output")
+    class_scores = tf.reshape(class_scores_linear, [tf.shape(final_dense_inputs)[0],params['sent_length'], params['num_classes']], name="class_scores_rs2")
+        
     # Compute the log-likelihood of the gold sequences and keep the transition
     # params for inference at test time.
     log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(
@@ -189,7 +201,10 @@ class EntityModel:
         self.dictionary: data['dictionary'],
         self.label_names: data['label_names'],
         self.sentences_chars: data['sentence_chars'],
-        self.word_lengths: data['word_lengths']
+        self.word_lengths: data['word_lengths'],
+        self.gazetteers_binary: data['gazetteers'],
+        self.dropout_05: 1.0,
+        self.dropout_08: 1.0
     }
     fetches = {
       'loss_value':self.loss,
@@ -200,6 +215,8 @@ class EntityModel:
     }
     if train:
       fetches['train_step'] = self.train_step
+      data[self.dropout_05] = 0.5
+      data[self.dropout_08] = 0.8
     return self.session.run(fetches, feed_dict=data)
   
   def saveModel(self, path):
@@ -285,7 +302,7 @@ class EntityModel:
     boc_features = tf.get_variable("boc_features",shape=[params['alphabet_size'],params['boc_feature_size']], dtype=tf.float32)
     return tf.nn.embedding_lookup(boc_features, sentences_chars)
   
-  def charCNN(self, char_embeddings, params):
+  def simpleCharCNN(self, char_embeddings, params):
     new_batch_size = tf.shape(char_embeddings)[0]*params['sent_length']
     # reshape to [batch*sent_length, word_length, depth]
     # use tf.shape(char_embeddings)[0] for batch since batch size is dynamic
@@ -326,4 +343,85 @@ class EntityModel:
       params['sent_length'],
       params['char_dense_out_features']
     ])
+  
+  def layeredCharCNN(self, char_embeddings, params):
+    """
+      Creates a CharCNN with multiple layers.
+      the list params['charCNN_layer_depths'] contains the depth
+      of each layer and its length is the number of layers.
+    """
+    new_batch_size = tf.shape(char_embeddings)[0]*params['sent_length']
+    # reshape to [batch*sent_length, word_length, depth]
+    # use tf.shape(char_embeddings)[0] for batch since batch size is dynamic
+    embeddings_rs = tf.reshape(char_embeddings, 
+    [
+      new_batch_size,
+      params['word_length'],
+      params['boc_feature_size']
+    ])
+    cur_layer = embeddings_rs
+    in_depth = params['boc_feature_size']
+    for idx, depth in enumerate(params['charCNN_layer_depths']):
+      out_depth = depth
+      cur_layer = self.charCNNLayer(cur_layer, in_depth, out_depth, params, "charCNN_layer_"+str(idx))
+      in_depth = out_depth
+    final_layer = cur_layer
+    final_layer_rs = tf.reshape(final_layer, [new_batch_size, params['charCNN_layer_depths'][-1]])
+    # after final CNN layer use dense layer
+    # final layer: [batch*sent_length, lastCharCNN_layer_depth]
+    linear = self.linearLayer(final_layer_rs, params['charCNN_layer_depths'][-1], params['char_dense_out_features'], "charCNN_dense")
+    dense_activation = tf.nn.relu(linear)
+    return tf.reshape(dense_activation, 
+    [
+      tf.shape(char_embeddings)[0],
+      params['sent_length'],
+      params['char_dense_out_features']
+    ]) 
+  
+  def charCNNLayer(self, input, in_depth, out_depth, params, name):
+    """
+      Each layer halves the length of the input
+    """
+    with tf.variable_scope(name):
+      # kernel for CNN
+      filter1 = tf.get_variable("char_cnn_filter1",shape=
+      [
+        params['char_cnn_filter_width'],
+        in_depth,
+        out_depth
+      ], dtype=tf.float32)
+      filter2 = tf.get_variable("char_cnn_filter2",shape=
+      [
+        params['char_cnn_filter_width'],
+        out_depth,
+        out_depth
+      ], dtype=tf.float32)
+      # CNN
+      char_cnn1 = tf.nn.conv1d(
+        input,
+        filter1,
+        1,
+        padding='SAME',
+        data_format="NHWC",
+        name="cnn1"
+      )
+      char_cnn2 = tf.nn.conv1d(
+        tf.nn.relu(char_cnn1),
+        filter2,
+        1,
+        padding='SAME',
+        data_format="NHWC",
+        name="cnn2"
+      )
+      # Pool
+      pool = tf.layers.max_pooling1d(
+        tf.nn.relu(char_cnn2),
+        2,
+        2,
+        padding='same',
+        data_format='channels_last',
+        name="max_pool"
+      )
+    return pool
+      
     

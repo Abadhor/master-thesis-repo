@@ -9,6 +9,8 @@ FILE_PATH = "D:/data/other/gazetteer/all-gazetteers.json"
 OUT_PATH = "D:/data/other/gazetteer/selected-gazetteers.json"
 WORD2VEC = "D:/data/other/wikipedia/300-1/skipgram.model"
 
+NUM_GAZETTEERS = 10000
+
 def norm_2(A):
   sum = 0
   for i in range(len(A)):
@@ -58,7 +60,7 @@ nlp = spacy.load('en_core_web_md')
 gazetteers = []
 MWT_gazetteers = []
 for idx, s in enumerate(strings):
-  print(idx, "/", len(strings), end="\r")
+  print(idx+1, "/", len(strings), end="\r")
   doc = nlp(s)
   tokens = [token.text.strip() for token in doc]
   valid = True
@@ -75,6 +77,7 @@ for idx, s in enumerate(strings):
       MWT_gazetteers.append((tokens, score, len(tokens)))
 
 MWT_gazetteers_sorted = sorted(MWT_gazetteers, key=itemgetter(1), reverse=True)
+MWT_gazetteers_sorted = [gaz[0] for gaz in MWT_gazetteers_sorted]
 
 with io.open(OUT_PATH, "w") as fp:
-  root = json.dump(MWT_gazetteers_sorted[:1000], fp)
+  json.dump(MWT_gazetteers_sorted[:NUM_GAZETTEERS], fp)

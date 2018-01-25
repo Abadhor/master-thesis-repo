@@ -1,0 +1,1 @@
+python WikiExtractor.py -o D:\data\other\wikipedia\extracted D:\data\other\wikipedia\enwiki-20170820-pages-articles-multistream.xml.bz2

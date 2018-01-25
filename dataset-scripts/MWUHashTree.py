@@ -19,7 +19,7 @@ class Node():
     if len(token_list) <= 1:
       # the token_list is already part of the tree
       # check if it has already been added exactly like this
-      if not self.dictionary[first].value:
+      if self.dictionary[first].value == None:
         self.dictionary[first].value = value
         return True
       else:
@@ -32,7 +32,7 @@ class Node():
     cur_tokens.append(first)
     if first not in self.dictionary:
       return return_list
-    if self.dictionary[first].value:
+    if self.dictionary[first].value != None:
       return_list.append(cur_tokens.copy())
     if len(token_list) <= 1:
       return return_list
@@ -45,7 +45,7 @@ class Node():
       return False
     if len(token_list) > 1:
       return token_list[1:] in self.dictionary[first]
-    if not self.dictionary[first].value:
+    if self.dictionary[first].value == None:
       return False
     return True
   
@@ -55,7 +55,7 @@ class Node():
       raise KeyError(token_list)
     if len(token_list) > 1:
       return self.dictionary[first][token_list[1:]]
-    if not self.dictionary[first].value:
+    if self.dictionary[first].value == None:
       raise KeyError(token_list)
     return self.dictionary[first].value
   
@@ -65,7 +65,7 @@ class Node():
       node = item[1]
       copy = cur_tokens.copy()
       copy.append(token)
-      if node.value:
+      if node.value != None:
         return_list.append((copy, node.value))
       node.items(copy, return_list)
 

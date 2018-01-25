@@ -27,11 +27,15 @@ params = {}
 # model parameters
 params['sent_length'] = meta['sent_length']
 params['word_length'] = meta['word_length']
+params['gazetteer_count'] = meta['gazetteer_count']
 params['hidden_size'] = 350
+params['gazetteers_dense_size'] = 50
 params['bow_feature_size'] = 100
 params['boc_feature_size'] = 21
 params['char_cnn_filter_width'] = 3
 params['char_cnn_out_features'] = 32
+# 16->8, 8->4, 4->2, 2->1
+params['charCNN_layer_depths'] = [32, 64, 128, 256]
 params['char_dense_out_features'] = 50
 params['vocab_size'] = len(meta['invDict'])
 params['alphabet_size'] = len(meta['alphabet']) + 1
@@ -44,11 +48,11 @@ batch_testing = True
 
 
 # training parameters
-num_epochs = 200
-early_stopping_epoch_limit = 20
+num_epochs = 600
+early_stopping_epoch_limit = 60
 params['starter_learning_rate'] = 0.01
 params['l2-coefficient'] = 0.01
-params['decay_steps'] = 100
+params['decay_steps'] = 200
 params['decay_rate'] = 0.96
 
 # load data
@@ -161,6 +165,7 @@ def runBatches(batches, train=False):
       'sent_lengths': batches['lengths'][b],
       'sentence_chars': batches['chars'][b],
       'word_lengths': batches['word_lengths'][b],
+      'gazetteers': batches['gazetteers'][b],
       'dictionary': meta['invDict'],
       'label_names': meta['labelNames']
     }
@@ -217,21 +222,21 @@ with EntityModel(params, word_features='emb') as clf:
     batches_train = createBatches(train, batch_size)
     performance = runBatches(batches_train, train=True)
     print("Train loss at Epoch", ep, ":", performance['loss'])
-    print("Train label counts: ", performance['label_counts'])
+    #print("Train label counts: ", performance['label_counts'])
     print("Train accuracy: {:.3%}".format(performance['accuracy']))
-    print("Train sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
-    print("Train precision: {:.3%}".format(performance['precision']))
-    print("Train recall: {:.3%}".format(performance['recall']))
+    #print("Train sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
+    #print("Train precision: {:.3%}".format(performance['precision']))
+    #print("Train recall: {:.3%}".format(performance['recall']))
     print("Train F1: {:.3%}".format(performance['F1']))
     print("                                                ", end='\r')
     batches_dev = createBatches(dev, batch_size, randomize=False)
     performance = runBatches(batches_dev)
     print("Devset loss at Epoch", ep, ":", performance['loss'])
-    print("Devset label counts: ", performance['label_counts'])
+    #print("Devset label counts: ", performance['label_counts'])
     print("Devset accuracy: {:.3%}".format(performance['accuracy']))
-    print("Devset sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
-    print("Devset precision: {:.3%}".format(performance['precision']))
-    print("Devset recall: {:.3%}".format(performance['recall']))
+    #print("Devset sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
+    #print("Devset precision: {:.3%}".format(performance['precision']))
+    #print("Devset recall: {:.3%}".format(performance['recall']))
     print("Devset F1: {:.3%}".format(performance['F1']))
     if performance['F1'] > best_F1:
       no_imp_ep_count = 0

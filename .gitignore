@@ -5,6 +5,7 @@
 */models
 packages.txt
 */data
+*/language_model
 
 # IDEs and editors
 /.idea
