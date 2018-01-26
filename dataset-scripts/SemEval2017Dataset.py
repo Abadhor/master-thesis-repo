@@ -22,7 +22,8 @@ class SemEval2017Dataset(KeywordDataset):
     
     # NLTK sentence splitter
     self.ABBREV_TYPES = set(['e.g', 'eq', 'eqs', 'etc', 'refs', 'ref', 'fig', 'figs', 'i.e', 'al', 'inc', 'sec', 'cf', 'i.v', 'adapt'])
-    self.sentence_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
+    if not self.useSpacy:
+      self.sentence_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
     
     # regex definitions
     self.sentence_tokenizer._params.abbrev_types.update(self.ABBREV_TYPES)
