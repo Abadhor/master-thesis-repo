@@ -24,9 +24,9 @@ class SemEval2017Dataset(KeywordDataset):
     self.ABBREV_TYPES = set(['e.g', 'eq', 'eqs', 'etc', 'refs', 'ref', 'fig', 'figs', 'i.e', 'al', 'inc', 'sec', 'cf', 'i.v', 'adapt'])
     if not self.useSpacy:
       self.sentence_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
+      self.sentence_tokenizer._params.abbrev_types.update(self.ABBREV_TYPES)
     
     # regex definitions
-    self.sentence_tokenizer._params.abbrev_types.update(self.ABBREV_TYPES)
     self.RE_REF = re.compile(r'\[[\d\W]*?\]')
     self.RE_FIG = re.compile(r'[F|f]igs?\. *\d+')
     self.RE_NEWLINE = re.compile(r'\n')
