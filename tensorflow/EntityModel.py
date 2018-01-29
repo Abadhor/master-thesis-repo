@@ -8,7 +8,7 @@ import random
 
 class EntityModel:
   
-  def __init__(self, params, word_features='emb', char_features='boc'):
+  def __init__(self, params, word_features='emb', char_features='boc', LM='emb'):
     self.session = tf.Session()
     # implement exponential learning rate decay
     # optimizer gets called with this learning_rate and updates
@@ -81,6 +81,12 @@ class EntityModel:
     else:
       raise ValueError('word_features='+word_features)
     
+    # word embeddings for LM
+    if LM == 'emb':
+      self.LM_wordEmbeddings(params)
+    else:
+      raise ValueError('LM='+LM)
+    
     # char embeddings
     if char_features=='boc':
       char_embeddings = self.BOC(self.sentences_chars, params)
@@ -105,7 +111,10 @@ class EntityModel:
     
     layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1')
     
-    layer2 = self.createBiDirectionalLSTMLayer(layer1, params['hidden_size'], self.sent_lengths, 'LSTM_l2')
+    layer2_inputs = tf.concat([layer1, self.LM_features],
+    axis=2, name="layer2_inputs")
+    
+    layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l2')
     
     # gazetteers layer
     gazetteers_dense_rs = tf.reshape(self.gazetteers_binary, [tf.shape(self.gazetteers_binary)[0]*params['sent_length'], params['gazetteer_count']],name="gazetteers_dense_rs")
@@ -181,6 +190,9 @@ class EntityModel:
     init_op.run(session=self.session)
     if word_features=='emb':
       self.session.run(self.init_embeddings, feed_dict={self.embedding_placeholder: params['word_embeddings']})
+    
+    if LM=='emb':
+      self.session.run(self.init_LM_embeddings, feed_dict={self.LM_embedding_placeholder: params['LM_embeddings']})
   
   def closeSession(self):
     self.session.close()
@@ -247,8 +259,8 @@ class EntityModel:
     return tf.transpose(tf.matmul(W, tf.transpose(input_, perm=[0,2,1])),perm=[0,2,1]) + b
   
   
-  def createBiDirectionalLSTMLayer(self, lstm_inputs, hidden_size, sent_lengths, name):
-    with tf.variable_scope(name): 
+  def createBiDirectionalLSTMLayer(self, lstm_inputs, hidden_size, sent_lengths, scope, concat=True):
+    with tf.variable_scope(scope): 
       # Create a forward and a backward LSTM layer for the bidirectional_dynamic_rnn
       fw = tf.contrib.rnn.BasicLSTMCell(hidden_size, state_is_tuple=True)
       bw = tf.contrib.rnn.BasicLSTMCell(hidden_size, state_is_tuple=True)
@@ -270,8 +282,29 @@ class EntityModel:
       )
       
       out_fw, out_bw = outputs
-      concat_outputs = tf.concat([out_fw, out_bw], 2)
-      return concat_outputs
+      if concat:
+        concat_outputs = tf.concat([out_fw, out_bw], 2)
+        return concat_outputs
+      else:
+        return out_fw, out_bw
+  
+  def createLSTMLayer(self, lstm_inputs, hidden_size, sent_lengths, scope):
+    with tf.variable_scope(scope): 
+      # Create a forward LSTM layer for the dynamic_rnn
+      fw = tf.contrib.rnn.BasicLSTMCell(hidden_size, state_is_tuple=True)
+      
+      # Returns a tuple (outputs, output_states) where:
+      # outputs:
+      # If time_major == False (default), outputs will be a Tensor shaped: 
+      # [batch_size, max_time, cell.output_size]
+      outputs, final_state = tf.nn.dynamic_rnn(
+          fw,
+          lstm_inputs,
+          sequence_length=sent_lengths,
+          dtype=tf.float32,
+          scope="fw-lstm"
+      )
+      return outputs
   
   def wordEmbeddings(self, params):
     # init word embeddings
@@ -289,6 +322,18 @@ class EntityModel:
     extra_idx = self.sentences - word_embeddings_vocab_const
     extra_features = tf.nn.embedding_lookup(extra_word_embeddings, extra_idx)
     self.token_features = self.token_features + extra_features
+  
+  def LM_wordEmbeddings(self, params):
+    # init word embeddings
+    LM_wv_shape = params['LM_embeddings'].shape
+    word_embeddings = tf.get_variable("LM_word_embeddings",shape=LM_wv_shape, trainable=False)
+    self.LM_embedding_placeholder = tf.placeholder(tf.float32, shape=LM_wv_shape)
+    self.init_LM_embeddings = tf.assign(word_embeddings, self.LM_embedding_placeholder)
+    self.LM_token_features = tf.nn.embedding_lookup(word_embeddings, self.sentences)
+    # LSTM layers for LM
+    fwd_l1, bw = self.createBiDirectionalLSTMLayer(self.LM_token_features, params['LM_hidden_size'], self.sent_lengths, 'LM_BI_LSTM', concat=False)
+    fwd_l2 = self.createLSTMLayer(fwd_l1, params['LM_hidden_size'], self.sent_lengths, 'LM_FWD_LSTM')
+    self.LM_features = tf.concat([fwd_l2, bw], 2)
   
   def BOW(self, params):
     # Bag of Words
