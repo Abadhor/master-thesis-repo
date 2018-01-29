@@ -81,7 +81,7 @@ class EntityModel:
     else:
       raise ValueError('word_features='+word_features)
     
-    # word embeddings for LM
+    # Language Model
     if LM == 'emb':
       self.LM_wordEmbeddings(params)
     else:
@@ -111,6 +111,7 @@ class EntityModel:
     
     layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1')
     
+    # add LM to layer 1 output
     layer2_inputs = tf.concat([layer1, self.LM_features],
     axis=2, name="layer2_inputs")
     
@@ -121,6 +122,7 @@ class EntityModel:
     gazetteers_dense_activation = tf.tanh(self.linearLayer(gazetteers_dense_rs, params['gazetteer_count'], params['gazetteers_dense_size'], "gazetteers_linear"))
     gazetteers_dense = tf.reshape(gazetteers_dense_activation, [tf.shape(self.gazetteers_binary)[0], params['sent_length'], params['gazetteers_dense_size']], name="gazetteers_dense_rs2")
     
+    # add gazetteers to layer 2 output
     final_dense_inputs = tf.concat([layer2, gazetteers_dense], axis=2, name="final_dense_inputs")
     
     # pass the final state into this linear function to multiply it 
@@ -177,8 +179,14 @@ class EntityModel:
     true_classes = tf.gather(self.label_names, true_classes)
     
     '''Define the operation that specifies the AdamOptimizer and tells
-      it to minimize the loss.''';
+      it to minimize the loss.'''    
     self.train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss, global_step=global_step)
+    
+    # AdamOptimizer with gradiant clipping
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+    gvs = optimizer.compute_gradients(self.loss)
+    capped_gvs = [(tf.clip_by_norm(grad,params['grad_clip_norm']), var) for grad, var in gvs]
+    self.train_step = optimizer.apply_gradients(capped_gvs, global_step=global_step)
 
     # initialize any variables
     init_op = tf.global_variables_initializer()

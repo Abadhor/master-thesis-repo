@@ -54,6 +54,7 @@ num_epochs = 600
 early_stopping_epoch_limit = 60
 params['starter_learning_rate'] = 0.01
 params['l2-coefficient'] = 0.01
+params['grad_clip_norm'] = 5.0
 params['decay_steps'] = 200
 params['decay_rate'] = 0.96
 
