@@ -60,13 +60,14 @@ class Tokenizer:
   
   def splitSentences(self, inputtext):
     doc = self.nlp(inputtext)
-    return [sent for sent in doc.sents]
+    return [sent.text for sent in doc.sents]
   
   def substituteTokenize(self, inputtext, cleanseHyphens=True):
     text = self.substituteNewline(inputtext)
     text = self.substituteUnknown(text)
     text = self.substituteBrackets(text)
     text = self.substituteNumbers(text)
+    text = text.lower()
     doc = self.nlp(text)
     # lemma to handle ending s
     # ending s is either noun plural or 3rd person singular verb
@@ -90,12 +91,16 @@ class MWUAnnotator:
     self.LB_LAST = 'L'
     self.LB_OUTSIDE = 'O'
     self.LB_UNIGRAM = 'U'
-    self.LABEL_NAMES = [LB_BEGINNING, LB_INSIDE, LB_LAST, LB_OUTSIDE, LB_UNIGRAM]
+    self.LABEL_NAMES = [self.LB_BEGINNING, 
+                        self.LB_INSIDE, 
+                        self.LB_LAST, 
+                        self.LB_OUTSIDE, 
+                        self.LB_UNIGRAM]
     self.label_dictionary = {label: idx for idx, label in enumerate(self.LABEL_NAMES)}
     for idx, MWU in enumerate(mwu_tokens_list):
       self.MWUs[MWU] = idx
   
-  def getLabels(tokens):
+  def getLabels(self, tokens):
     labels = [self.LB_OUTSIDE for i in range(len(tokens))]
     MWU_token_count = 0
     for token_id in range(len(tokens)):
@@ -114,8 +119,8 @@ class MWUAnnotator:
           MWU_token_count -= 1
     return labels
   
-  def getLabelID(label):
-    return label_dictionary[label]
+  def getLabelID(self, label):
+    return self.label_dictionary[label]
 
 class Vectorizer:
   """
@@ -138,53 +143,62 @@ class Vectorizer:
     else:
       self.gazetteers = None
   
-  def tokenVectorize(tokens, maxSentLenght):
+  def tokenVectorize(self, tokens, maxSentLenght):
     # Returns the sentence as a vector
-    token_vector = np.full((1,maxSentLenght), len(self.dictionary)+1, dtype=dtype='int32')
+    token_vector = np.full((1,maxSentLenght), len(self.dictionary)+1, dtype='int32')
     for t_idx, token in enumerate(tokens):
+      if t_idx >= maxSentLenght:
+        break
       if token not in self.dictionary:
-        token_vector[1,t_idx] = len(self.dictionary)
+        token_vector[0,t_idx] = len(self.dictionary)
       else:
-        token_vector[1,t_idx] = self.dictionary[token]
+        token_vector[0,t_idx] = self.dictionary[token]
     return token_vector
   
-  def labelVectorize(tokens):
+  def labelVectorize(self, tokens, maxSentLenght):
     labels = self.annotator.getLabels(tokens)
-    label_vector = np.full((1,maxSentLenght), len(self.annotator.LABEL_NAMES), dtype=dtype='int32')
+    label_vector = np.full((1,maxSentLenght), len(self.annotator.LABEL_NAMES), dtype='int32')
     for l_idx, label in enumerate(labels):
-      label_vector[1,l_idx] = self.annotator.getLabelID(label)
+      if l_idx >= maxSentLenght:
+        break
+      label_vector[0,l_idx] = self.annotator.getLabelID(label)
+    return label_vector
   
-  def characterVectorize(tokens, maxSentLenght, maxWordLength):
+  def characterVectorize(self, tokens, maxSentLenght, maxWordLength):
     # Returns the sentence as a list of char vectors
     # and the char vector lengths
     char_vector = np.full((1,maxSentLenght,maxWordLength), len(self.alphabet), dtype='int32')
     lengths = np.zeros((1, maxSentLenght), dtype='int32')
-    for t_idx, token in enumerate(s):
+    for t_idx, token in enumerate(tokens):
+      if t_idx >= maxSentLenght:
+        break
       for c_idx, c in enumerate(token):
-        if (c_idx >= maxWordLength):
+        if c_idx >= maxWordLength:
           break
-        char_vector[1, t_idx, c_idx] = self.alphabet[c]
-      lengths[1, t_idx] = min(len(token), maxWordLength)
+        char_vector[0, t_idx, c_idx] = self.alphabet[c]
+      lengths[0, t_idx] = min(len(token), maxWordLength)
     return char_vector, lengths
   
-  def gazetteerVectorize(tokens, maxSentLenght):
+  def gazetteerVectorize(self, tokens, maxSentLenght):
     gaz_vector = np.zeros((1,maxSentLenght,len(self.gazetteers)), dtype='int32')
     for token_id in range(len(tokens)):
+      if token_id >= maxSentLenght:
+        break
       found_gaz = self.gazetteers.getAll(tokens[token_id:])
       for gaz in found_gaz:
         gaz_id = self.gazetteers[gaz]
         for i in range(len(gaz)):
-          gaz_data[1, token_id+i, gaz_id] = 1
+          gaz_data[0, token_id+i, gaz_id] = 1
     return gaz_vector
   
-  def vectorize(tokens, maxSentLenght, maxWordLength):
+  def vectorize(self, tokens, maxSentLenght, maxWordLength):
     token_vector = self.tokenVectorize(tokens, maxSentLenght)
     label_vector = self.labelVectorize(tokens, maxSentLenght)
-    char_vector = self.characterVectorize(tokens, maxSentLenght, maxWordLength)
+    char_vector, char_lengths = self.characterVectorize(tokens, maxSentLenght, maxWordLength)
     if self.gazetteers != None:
       gazetteer_vector = gazetteerVectorize(tokens, maxSentLenght)
-      return token_vector, label_vector, char_vector, gazetteer_vector
-    return token_vector, label_vector, char_vector
+      return token_vector, np.array((len(tokens),)), label_vector, char_vector, char_lengths, gazetteer_vector
+    return token_vector, np.array((len(tokens),)), label_vector, char_vector, char_lengths
     
     
   
