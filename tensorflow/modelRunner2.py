@@ -122,6 +122,21 @@ class MWTDatasetCreator:
       })
     return sentences
   
+  def parse_proto(self, example_proto):
+    features = {
+      'tokens': tf.FixedLenFeature((self.maxSentLenght,), tf.int64),
+      'length': tf.FixedLenFeature((), tf.int64),
+      'labels': tf.FixedLenFeature((self.maxSentLenght,), tf.int64),
+      'chars': tf.FixedLenFeature((self.maxSentLenght,self.maxWordLength), tf.int64),
+      'char_lengths': tf.FixedLenFeature((self.maxSentLenght,), tf.int64),
+      'sentence_id': tf.FixedLenFeature((), tf.int64),
+      'sentence_part_id': tf.FixedLenFeature((), tf.int64),
+      'sentence_part_count': tf.FixedLenFeature((), tf.int64),
+    }
+    parsed_features = tf.parse_single_example(example_proto, features)
+    return parsed_features['tokens'], parsed_features['length'], parsed_features['labels'], parsed_features['chars'], parsed_features['char_lengths'], parsed_features['sentence_id'], parsed_features['sentence_part_id'], parsed_features['sentence_part_count']
+  
+  
   def createDataset(self, files):
     tokenized_sentences = []
     for idx, sent in enumerate(self._get_sentences(files)):
@@ -144,18 +159,12 @@ class MWTDatasetCreator:
       example = tf.train.Example(features=tf.train.Features(feature=feature))
       serialized = example.SerializeToString()
       writer.write(serialized)
-    
+    print("End of preprocessing")
     writer.close()
-    
-    return None
-  
-  def parse_proto(example_proto):
-    features = {
-      'X': tf.FixedLenFeature((345,), tf.float32),
-      'y': tf.FixedLenFeature((5,), tf.float32),
-    }
-    parsed_features = tf.parse_single_example(example_proto, features)
-    return parsed_features['X'], parsed_features['y']
+    dataset = tf.data.TFRecordDataset([self.out_file])
+    dataset = dataset.map(self.parse_proto)
+    dataset = dataset.cache()
+    return dataset
   
   
 
@@ -190,20 +199,20 @@ def createDataset(files, tokenizer, annotator):
         break
 
 #createDataset(train_files, tokenizer, annotator)
-c = MWTDatasetCreator(tmp, tokenizer, vectorizer, 2, 4)
+c = MWTDatasetCreator(tmp, tokenizer, vectorizer, 50, 4)
 d2 = c.createDataset(train_files)
-exit()
 iterator = d2.make_initializable_iterator()
 next_element = iterator.get_next()
 times = []
 with tf.Session() as sess, io.open('./test2.txt', 'w', encoding='utf-8') as fp:
-  for i in range(1):
+  for i in range(10):
     start_time = time.time()
     sess.run(iterator.initializer)
     while True:
       try:
         t = sess.run(next_element)
         #fp.write('tokens:'+str(t[0])+';'+ 'length:'+str(t[1])+';'+'labels:'+str(t[2])+';'+'chars:'+str(t[3])+';'+'charLens:'+str(t[4])+';' + '\n')
+        #fp.write(str(t) + '\n')
       except tf.errors.OutOfRangeError:
         print("End of dataset 2")
         break
