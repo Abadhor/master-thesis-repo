@@ -2,7 +2,6 @@ import spacy
 import string
 import re
 import numpy as np
-from nltk.tokenize import RegexpTokenizer
 from MWUHashTree import MWUHashTree
 
 class Tokenizer:
@@ -13,6 +12,7 @@ class Tokenizer:
   def __init__(self, spacynlp=None):
     if spacynlp == None:
       self.nlp = spacy.load('en_core_web_md')
+      print("Spacy model 'en_core_web_md' loaded")
     else:
       self.nlp = spacynlp
     self.alphabet = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ §'
@@ -30,15 +30,6 @@ class Tokenizer:
     self.RE_NEWLINE_SUB = ' '
     self.RE_HYPHEN = re.compile('['+re.escape('-')+']')
     self.RE_HYPHEN_SUB = ' '
-  
-  def cleanseTokenize(self, inputtext):
-    text=inputtext.lower()
-    cleanr =re.compile('<.*?>')
-    text=re.sub(cleanr,'', text)
-    text=re.sub('\d+', ' ', text)
-    tokenizer = RegexpTokenizer(r'\w+')
-    processed_tokens = tokenizer.tokenize(text)
-    return processed_tokens
 
   def substituteUnknown(self, inputtext):
     return re.sub(self.RE_UNKNOWN, self.RE_UNKNOWN_SUB, inputtext)
@@ -82,21 +73,21 @@ class MWUAnnotator:
   """
     Creates labels by annotating all MWUs in a text in BILOU format.
   """
+  LB_BEGINNING = 'B'
+  LB_INSIDE = 'I'
+  LB_LAST = 'L'
+  LB_OUTSIDE = 'O'
+  LB_UNIGRAM = 'U'
+  LABEL_NAMES = [LB_BEGINNING, 
+                 LB_INSIDE, 
+                 LB_LAST, 
+                 LB_OUTSIDE, 
+                 LB_UNIGRAM]
+  label_dictionary = {label: idx for idx, label in enumerate(LABEL_NAMES)}
   
   # Pass a list of tokenized MWUs 
   def __init__(self, mwu_tokens_list):
     self.MWUs = MWUHashTree()
-    self.LB_BEGINNING = 'B'
-    self.LB_INSIDE = 'I'
-    self.LB_LAST = 'L'
-    self.LB_OUTSIDE = 'O'
-    self.LB_UNIGRAM = 'U'
-    self.LABEL_NAMES = [self.LB_BEGINNING, 
-                        self.LB_INSIDE, 
-                        self.LB_LAST, 
-                        self.LB_OUTSIDE, 
-                        self.LB_UNIGRAM]
-    self.label_dictionary = {label: idx for idx, label in enumerate(self.LABEL_NAMES)}
     for idx, MWU in enumerate(mwu_tokens_list):
       self.MWUs[MWU] = idx
   

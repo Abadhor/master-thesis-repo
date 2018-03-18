@@ -64,5 +64,33 @@ dataset = tf.data.Dataset.from_tensor_slices(['First sent','', 'Second'])
 get_next = dataset.make_one_shot_iterator().get_next()
 sess.run(get_next)
 
+def _decode_encode_wrapper(x, fun):
+    return np.array(
+      [ele.encode('utf-8') for ele in fun(x.decode('utf-8'))],
+      dtype='object')
 
+
+def createDataset(files, tokenizer, annotator):
+  dataset = tf.data.TextLineDataset(files)
+  # split sentences flat map
+  dataset = dataset.flat_map(
+    lambda x: tf.data.Dataset.from_tensor_slices(tf.py_func(
+      lambda y: _decode_encode_wrapper(y, tokenizer.splitSentences),
+      [x], tf.string)))
+  # tokenize map
+  dataset = dataset.map(lambda x: tf.py_func(
+    lambda y: _decode_encode_wrapper(y, tokenizer.substituteTokenize), [x], tf.string))
+  get_next = dataset.make_one_shot_iterator().get_next()
+  with tf.Session() as sess, io.open('./test.txt', 'w', encoding='utf-8') as fp:
+    while True:
+      try:
+        line = sess.run(get_next)
+        #line = line.decode('utf-8')
+        #tokens = tokenizer.substituteTokenize(line)
+        #labels = annotator.getLabels(tokens)
+        #fp.write(str([[t[0],t[1]] for t in zip(tokens, labels)]) + '\n')
+        fp.write(str([ele.decode('utf-8') for ele in line]) + '\n')
+      except tf.errors.OutOfRangeError:
+        print("End of dataset")
+        break
 

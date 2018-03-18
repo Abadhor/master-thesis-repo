@@ -1,76 +1,5 @@
-import sys
-import os
-import pickle
-import io
-import json
-sys.path.append('../dataset-scripts')
-from Preprocessing import Tokenizer, MWUAnnotator, Vectorizer
 import tensorflow as tf
 import numpy as np
-from gensim.models.word2vec import Word2Vec
-import argparse
-import options
-import time
-import random
-random.seed(5)
-
-"""
-parser = argparse.ArgumentParser()
-parser.add_argument(
-      "--data_dir",
-      type=str,
-      default="",
-      required=True,
-      help="The location of the GATE inline MWT annotated text files.")
-parser.add_argument(
-      "--mwt_dir",
-      type=str,
-      default="",
-      required=True,
-      help="The name of the output file of the pickled set.")
-args = parser.parse_args()
-"""
-
-text_dir = "D:/data/datasets/patent_mwt/plaintext/"
-mwt_file = "D:/data/datasets/patent_mwt/mwts/mwts.set"
-tmp = "D:/Uni/MasterThesis/master-thesis-repo/tensorflow/tmp/data.tfrecord"
-LM_DICT = "vocab-2016-09-10.txt"
-LM_DATA = "embeddings_char_cnn.npy"
-
-WORD2VEC = "D:/data/other/clefipnostem/300-1/skipgram.model"
-NEW_WORDS = ['.', ',', ';', '$', '(', ')', '§']
-WORD_MAX_LEN = 16
-SENT_MAX_LEN = 50
-
-filenames = [text_dir + fname for fname in os.listdir(text_dir)]
-sample = random.sample(filenames, 4)
-test_files = sample[:2]
-dev_files = sample[2:]
-train_files = [fname for fname in filenames if fname not in sample]
-
-with io.open(mwt_file, 'rb') as fp:
-  mwt_set = pickle.load(fp)
-
-model = Word2Vec.load(WORD2VEC)
-dictionary = model.wv.vocab
-dictionary = {k:v.count for k, v in dictionary.items()}
-for w in NEW_WORDS:
-  dictionary[w] = 1
-
-tokenizer = Tokenizer()
-
-mwt_tokens_list = []
-for mwt in mwt_set:
-  tokens = tokenizer.substituteTokenize(mwt)
-  mwt_tokens_list.append(tokens)
-
-mwt_tokens_list = [x for x in mwt_tokens_list if len(x) > 1]
-
-annotator = MWUAnnotator(mwt_tokens_list)
-vectorizer = Vectorizer(annotator, dictionary, {l:1 for l in tokenizer.alphabet}, gazetteers=None)
-#text = "A Test."
-#tokens = tokenizer.substituteTokenize(text)
-#rt = tuple(vectorizer.vectorize(tokens, 3, 4))
 
 class MWTDatasetCreator:
   
@@ -91,7 +20,7 @@ class MWTDatasetCreator:
           line = sess.run(get_next).decode('utf-8')
           sents.extend(self.tokenizer.splitSentences(line))
         except tf.errors.OutOfRangeError:
-          print("End of dataset")
+          print("Finished reading text files.")
           break
     return sents
   
@@ -122,7 +51,7 @@ class MWTDatasetCreator:
       })
     return sentences
   
-  def parse_proto(self, example_proto):
+  def _parse_proto(self, example_proto):
     features = {
       'tokens': tf.FixedLenFeature((self.maxSentLenght,), tf.int64),
       'length': tf.FixedLenFeature((), tf.int64),
@@ -139,9 +68,15 @@ class MWTDatasetCreator:
   
   def createDataset(self, files):
     tokenized_sentences = []
+    full_lengths = []
     for idx, sent in enumerate(self._get_sentences(files)):
       tokens = self.tokenizer.substituteTokenize(sent)
+      full_lengths.append(len(tokens))
       tokenized_sentences.extend(self._split_sentences(tokens,idx))
+    full_lengths = np.array(full_lengths)
+    print("Finished tokenization")
+    print("Sentence Length Mean:", np.mean(full_lengths, axis=0))
+    print("Sentence Length Stdev:", np.std(full_lengths, axis=0))
     
     writer = tf.python_io.TFRecordWriter(self.out_file)
     for sent in tokenized_sentences:
@@ -159,62 +94,9 @@ class MWTDatasetCreator:
       example = tf.train.Example(features=tf.train.Features(feature=feature))
       serialized = example.SerializeToString()
       writer.write(serialized)
-    print("End of preprocessing")
     writer.close()
+    print("End of preprocessing")
     dataset = tf.data.TFRecordDataset([self.out_file])
-    dataset = dataset.map(self.parse_proto)
-    dataset = dataset.cache()
+    dataset = dataset.map(self._parse_proto)
     return dataset
-  
-  
-
-def _decode_encode_wrapper(x, fun):
-    return np.array(
-      [ele.encode('utf-8') for ele in fun(x.decode('utf-8'))],
-      dtype='object')
-
-
-def createDataset(files, tokenizer, annotator):
-  dataset = tf.data.TextLineDataset(files)
-  # split sentences flat map
-  dataset = dataset.flat_map(
-    lambda x: tf.data.Dataset.from_tensor_slices(tf.py_func(
-      lambda y: _decode_encode_wrapper(y, tokenizer.splitSentences),
-      [x], tf.string)))
-  # tokenize map
-  dataset = dataset.map(lambda x: tf.py_func(
-    lambda y: _decode_encode_wrapper(y, tokenizer.substituteTokenize), [x], tf.string))
-  get_next = dataset.make_one_shot_iterator().get_next()
-  with tf.Session() as sess, io.open('./test.txt', 'w', encoding='utf-8') as fp:
-    while True:
-      try:
-        line = sess.run(get_next)
-        #line = line.decode('utf-8')
-        #tokens = tokenizer.substituteTokenize(line)
-        #labels = annotator.getLabels(tokens)
-        #fp.write(str([[t[0],t[1]] for t in zip(tokens, labels)]) + '\n')
-        fp.write(str([ele.decode('utf-8') for ele in line]) + '\n')
-      except tf.errors.OutOfRangeError:
-        print("End of dataset")
-        break
-
-#createDataset(train_files, tokenizer, annotator)
-c = MWTDatasetCreator(tmp, tokenizer, vectorizer, 50, 4)
-d2 = c.createDataset(train_files)
-iterator = d2.make_initializable_iterator()
-next_element = iterator.get_next()
-times = []
-with tf.Session() as sess, io.open('./test2.txt', 'w', encoding='utf-8') as fp:
-  for i in range(10):
-    start_time = time.time()
-    sess.run(iterator.initializer)
-    while True:
-      try:
-        t = sess.run(next_element)
-        #fp.write('tokens:'+str(t[0])+';'+ 'length:'+str(t[1])+';'+'labels:'+str(t[2])+';'+'chars:'+str(t[3])+';'+'charLens:'+str(t[4])+';' + '\n')
-        #fp.write(str(t) + '\n')
-      except tf.errors.OutOfRangeError:
-        print("End of dataset 2")
-        break
-    times.append(time.time() - start_time)
-print(times)
+ 
