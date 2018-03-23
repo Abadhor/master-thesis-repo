@@ -3,12 +3,11 @@ import numpy as np
 
 class MWTDatasetCreator:
   
-  def __init__(self, out_file, tokenizer, vectorizer, maxSentLenght, maxWordLength):
+  def __init__(self, tokenizer, vectorizer, maxSentLenght, maxWordLength):
     self.tokenizer = tokenizer
     self.vectorizer = vectorizer
     self.maxSentLenght = maxSentLenght
     self.maxWordLength = maxWordLength
-    self.out_file = out_file
   
   def _get_sentences(self, files):
     dataset = tf.data.TextLineDataset(files)
@@ -63,10 +62,13 @@ class MWTDatasetCreator:
       'sentence_part_count': tf.FixedLenFeature((), tf.int64),
     }
     parsed_features = tf.parse_single_example(example_proto, features)
-    return parsed_features['tokens'], parsed_features['length'], parsed_features['labels'], parsed_features['chars'], parsed_features['char_lengths'], parsed_features['sentence_id'], parsed_features['sentence_part_id'], parsed_features['sentence_part_count']
+    #return parsed_features['tokens'], parsed_features['length'], parsed_features['labels'], parsed_features['chars'], parsed_features['char_lengths'], parsed_features['sentence_id'], parsed_features['sentence_part_id'], parsed_features['sentence_part_count']
+    labels = parsed_features['labels']
+    del parsed_features['labels']
+    return parsed_features, labels
   
   
-  def createDataset(self, files):
+  def createDataset(self, files, out_file):
     tokenized_sentences = []
     full_lengths = []
     for idx, sent in enumerate(self._get_sentences(files)):
@@ -75,10 +77,12 @@ class MWTDatasetCreator:
       tokenized_sentences.extend(self._split_sentences(tokens,idx))
     full_lengths = np.array(full_lengths)
     print("Finished tokenization")
+    print("Sentence Count:", len(full_lengths))
+    print("Sentence Count (Split):", len(tokenized_sentences))
     print("Sentence Length Mean:", np.mean(full_lengths, axis=0))
     print("Sentence Length Stdev:", np.std(full_lengths, axis=0))
     
-    writer = tf.python_io.TFRecordWriter(self.out_file)
+    writer = tf.python_io.TFRecordWriter(out_file)
     for sent in tokenized_sentences:
       token_vector, length, label_vector, char_vector, char_lengths = self.vectorizer.vectorize(sent['tokens'], self.maxSentLenght, self.maxWordLength)
       feature = {
@@ -96,7 +100,7 @@ class MWTDatasetCreator:
       writer.write(serialized)
     writer.close()
     print("End of preprocessing")
-    dataset = tf.data.TFRecordDataset([self.out_file])
+    dataset = tf.data.TFRecordDataset([out_file])
     dataset = dataset.map(self._parse_proto)
     return dataset
  

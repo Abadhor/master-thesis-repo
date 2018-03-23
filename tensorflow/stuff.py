@@ -128,3 +128,78 @@ transpose [0,2,1]
 (batch_size, sent_size, num_classes)
 """
 
+
+
+def input_fn():
+  dataset = tf.data.Dataset.range(10)
+  dataset = dataset.map(lambda x: ({'x':x},[1]))
+  return dataset.make_one_shot_iterator().get_next()
+
+def my_model_fn(
+   features, # This is batch_features from input_fn
+   labels,   # This is batch_labels from input_fn
+   mode,     # An instance of tf.estimator.ModeKeys
+   params):  # Additional configuration
+  print("Here is stuff\n\n\nHere too!")
+  print(params)
+  print(features)
+  logits = tf.constant([-1,1], dtype=tf.float32)
+  print("1")
+  print(features['x'].shape)
+  print(logits.shape)
+  predicted_classes = tf.argmax(logits, 0)
+  print("2")
+  if mode == tf.estimator.ModeKeys.PREDICT:
+    predictions = {
+          'class_ids': predicted_classes,
+          'probabilities': tf.nn.softmax(logits),
+          'logits': logits,
+    }
+    return tf.estimator.EstimatorSpec(mode, predictions=predictions)
+  # Compute loss.
+  var1 = tf.get_variable("log", shape=(1,), dtype=tf.float32)
+  loss = tf.cast(features['x'], dtype=tf.float32) + var1
+  # Compute evaluation metrics.
+  print("3")
+  accuracy = tf.metrics.accuracy(labels=labels,
+                               predictions=predicted_classes,
+                               name='acc_op')
+  print("3.1")
+  metrics = {'accuracy': accuracy}
+  print("3.2")
+  tf.summary.scalar('accuracy', accuracy[1])
+  print("4")
+  if mode == tf.estimator.ModeKeys.EVAL:
+      return tf.estimator.EstimatorSpec(
+          mode, loss=loss, eval_metric_ops=metrics)
+  optimizer = tf.train.AdagradOptimizer(learning_rate=0.1)
+  train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+  return tf.estimator.EstimatorSpec(mode, loss=loss, train_op=train_op)
+
+class MyHook(tf.train.SessionRunHook):
+  
+  def __init__(self):
+    super().__init__()
+    self.i = 0
+  
+  def after_run(self, run_context, run_values):
+    print(self.i)
+    if self.i > 3:
+      run_context.request_stop()
+    self.i += 1
+
+# Build 2 hidden layer DNN with 10, 10 units respectively.
+classifier = tf.estimator.Estimator(
+    model_fn=my_model_fn,
+    model_dir='./tmp/',
+    params={
+        'feature_columns': 'my_feature_columns',
+        # Two hidden layers of 10 nodes each.
+        'hidden_units': [10, 10],
+        # The model must choose between 3 classes.
+        'n_classes': 3,
+    })
+classifier.train(input_fn, hooks=[MyHook()], steps=5)
+classifier.evaluate(input_fn)
+classifier.predict(input_fn)
+

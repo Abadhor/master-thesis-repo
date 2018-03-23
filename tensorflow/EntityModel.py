@@ -8,7 +8,7 @@ import random
 
 class EntityModel:
   
-  def __init__(self, params, word_features='emb', char_features='boc', LM='emb'):
+  def __init__(self, params, word_features='emb', char_features='boc', LM='emb', gazetteers=True):
     self.session = tf.Session()
     # implement exponential learning rate decay
     # optimizer gets called with this learning_rate and updates
@@ -63,15 +63,9 @@ class EntityModel:
     
     self.word_len_mask = tf.sequence_mask(self.word_lengths, maxlen=params['word_length'], dtype=tf.float32)
     
-    # placeholder for the binary gazetteers feature of each word
-    self.gazetteers_binary = tf.placeholder(tf.float32, [None, params['sent_length'], params['gazetteer_count']], name="gazetteers_binary")
-    
-    
-    # placeholder for the dictionary
-    self.dictionary = tf.placeholder(tf.string, [params['vocab_size']], name="invDict")
-    
-    # placeholder for the label_names
-    self.label_names = tf.placeholder(tf.string, [params['num_classes']], name="label_names")
+    if gazetteers:
+      # placeholder for the binary gazetteers feature of each word
+      self.gazetteers_binary = tf.placeholder(tf.float32, [None, params['sent_length'], params['gazetteer_count']], name="gazetteers_binary")
     
     # word embeddings
     if word_features=='emb':
@@ -83,7 +77,9 @@ class EntityModel:
     
     # Language Model
     if LM == 'emb':
-      self.LM_wordEmbeddings(params)
+      LM_features = self.LM_wordEmbeddings(params)
+    elif LM == None:
+      print('LM == None')
     else:
       raise ValueError('LM='+LM)
     
@@ -112,18 +108,24 @@ class EntityModel:
     layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1')
     
     # add LM to layer 1 output
-    layer2_inputs = tf.concat([layer1, self.LM_features],
-    axis=2, name="layer2_inputs")
+    if LM == 'emb':
+      layer2_inputs = tf.concat([layer1, LM_features],
+      axis=2, name="layer2_inputs")
+    else:
+      layer2_inputs = layer1
     
     layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l2')
     
-    # gazetteers layer
-    gazetteers_dense_rs = tf.reshape(self.gazetteers_binary, [tf.shape(self.gazetteers_binary)[0]*params['sent_length'], params['gazetteer_count']],name="gazetteers_dense_rs")
-    gazetteers_dense_activation = tf.tanh(self.linearLayer(gazetteers_dense_rs, params['gazetteer_count'], params['gazetteers_dense_size'], "gazetteers_linear"))
-    gazetteers_dense = tf.reshape(gazetteers_dense_activation, [tf.shape(self.gazetteers_binary)[0], params['sent_length'], params['gazetteers_dense_size']], name="gazetteers_dense_rs2")
-    
-    # add gazetteers to layer 2 output
-    final_dense_inputs = tf.concat([layer2, gazetteers_dense], axis=2, name="final_dense_inputs")
+    if gazetteers:
+      # gazetteers layer
+      gazetteers_dense_rs = tf.reshape(self.gazetteers_binary, [tf.shape(self.gazetteers_binary)[0]*params['sent_length'], params['gazetteer_count']],name="gazetteers_dense_rs")
+      gazetteers_dense_activation = tf.tanh(self.linearLayer(gazetteers_dense_rs, params['gazetteer_count'], params['gazetteers_dense_size'], "gazetteers_linear"))
+      gazetteers_dense = tf.reshape(gazetteers_dense_activation, [tf.shape(self.gazetteers_binary)[0], params['sent_length'], params['gazetteers_dense_size']], name="gazetteers_dense_rs2")
+      
+      # add gazetteers to layer 2 output
+      final_dense_inputs = tf.concat([layer2, gazetteers_dense], axis=2, name="final_dense_inputs")
+    else:
+      final_dense_inputs = layer2
     
     # pass the final state into this linear function to multiply it 
     # by the weights and add bias to get our output.
@@ -171,13 +173,6 @@ class EntityModel:
     correct_sent = tf.cast(tf.equal(sent_sum, mask_sum), tf.float32)
     self.sentence_accuracy = tf.reduce_mean(correct_sent)
     
-    # decode sentences into readable words and labels
-    # lookup the string of the ID of the words and classes
-    # in the word dictionary and label name dictionary
-    #sent_decoded = tf.gather(self.dictionary, sent_decoded)
-    pred_classes_names = tf.gather(self.label_names, self.pred_classes)
-    true_classes = tf.gather(self.label_names, true_classes)
-    
     '''Define the operation that specifies the AdamOptimizer and tells
       it to minimize the loss.'''    
     self.train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss, global_step=global_step)
@@ -218,7 +213,6 @@ class EntityModel:
         self.sentences: data['sentences'],
         self.labels: data['labels'],
         self.sent_lengths: data['sent_lengths'],
-        self.dictionary: data['dictionary'],
         self.label_names: data['label_names'],
         self.sentences_chars: data['sentence_chars'],
         self.word_lengths: data['word_lengths'],
@@ -238,6 +232,9 @@ class EntityModel:
       data[self.dropout_05] = 0.5
       data[self.dropout_08] = 0.8
     return self.session.run(fetches, feed_dict=data)
+  
+  def getSession(self):
+    return self.session
   
   def saveModel(self, path):
     return self.saver.save(self.session, path)
@@ -341,7 +338,7 @@ class EntityModel:
     # LSTM layers for LM
     fwd_l1, bw = self.createBiDirectionalLSTMLayer(self.LM_token_features, params['LM_hidden_size'], self.sent_lengths, 'LM_BI_LSTM', concat=False)
     fwd_l2 = self.createLSTMLayer(fwd_l1, params['LM_hidden_size'], self.sent_lengths, 'LM_FWD_LSTM')
-    self.LM_features = tf.concat([fwd_l2, bw], 2)
+    return tf.concat([fwd_l2, bw], 2)
   
   def BOW(self, params):
     # Bag of Words

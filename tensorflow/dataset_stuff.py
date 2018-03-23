@@ -94,3 +94,27 @@ def createDataset(files, tokenizer, annotator):
         print("End of dataset")
         break
 
+
+dataset = tf.data.Dataset.range(10)
+dataset = dataset.shuffle(10)
+iterator = dataset.make_initializable_iterator()
+next_element = iterator.get_next()
+
+# print outs should be different
+with tf.Session() as sess:
+  sess.run(iterator.initializer)
+  while True:
+    try:
+      t = sess.run(next_element)
+      print(t, end=" ")
+    except tf.errors.OutOfRangeError:
+      print("End of dataset")
+      break
+  sess.run(iterator.initializer)
+  while True:
+    try:
+      t = sess.run(next_element)
+      print(t, end=" ")
+    except tf.errors.OutOfRangeError:
+      print("End of dataset")
+      break
