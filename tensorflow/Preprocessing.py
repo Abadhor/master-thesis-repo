@@ -136,6 +136,8 @@ class Vectorizer:
   
   def tokenVectorize(self, tokens, maxSentLenght):
     # Returns the sentence as a vector
+    # Not-in-dictionary token ID = len(self.dictionary)
+    # Padding token ID = len(self.dictionary) + 1
     token_vector = np.full((1,maxSentLenght), len(self.dictionary)+1, dtype='int32')
     for t_idx, token in enumerate(tokens):
       if t_idx >= maxSentLenght:
@@ -158,6 +160,7 @@ class Vectorizer:
   def characterVectorize(self, tokens, maxSentLenght, maxWordLength):
     # Returns the sentence as a list of char vectors
     # and the char vector lengths
+    # Padding char ID = len(self.dictionary)
     char_vector = np.full((1,maxSentLenght,maxWordLength), len(self.alphabet), dtype='int32')
     lengths = np.zeros((1, maxSentLenght), dtype='int32')
     for t_idx, token in enumerate(tokens):

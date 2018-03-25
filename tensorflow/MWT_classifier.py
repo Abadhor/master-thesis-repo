@@ -1,14 +1,9 @@
-import sys
 import os
 import pickle
 import io
-import json
-sys.path.append('../dataset-scripts')
 from Preprocessing import Tokenizer, MWUAnnotator, Vectorizer
 from MWTDatasetCreator import MWTDatasetCreator
 from TrainHelpers import TrainHelpers as hlp
-import tensorflow as tf
-import numpy as np
 from gensim.models.word2vec import Word2Vec
 import argparse
 import options
@@ -56,27 +51,27 @@ params = {}
 params['sent_length'] = 60
 params['word_length'] = 32
 params['hidden_size'] = 350
-params['bow_feature_size'] = 100
 params['boc_feature_size'] = 21
-params['char_cnn_filter_width'] = 3
-params['char_cnn_out_features'] = 32
 # char CNN
 # 32->16, 16->8, 8->4, 4->2, 2->1
 params['charCNN_layer_depths'] = [32, 64, 128, 256, 512]
 params['char_dense_out_features'] = 50
+params['char_cnn_filter_width'] = 3
+params['char_cnn_out_features'] = 32
 # gazetteers
+"""
 params['gazetteer_count'] = 0
 params['gazetteers_dense_size'] = 50
+"""
 params['num_classes'] = len(MWUAnnotator.LABEL_NAMES) + 1 # + padding label
 """
 params['LM_embeddings'] = meta['char_CNN_vectors']
 params['LM_hidden_size'] = 512
 """
-batch_size = 64
-
 
 # training parameters
 num_epochs = 600
+batch_size = 64
 early_stopping_epoch_limit = 60
 performance_metric = 'F1'
 params['starter_learning_rate'] = 0.01
@@ -135,39 +130,44 @@ annotator = MWUAnnotator(mwt_tokens_list)
 
 vectorizer = Vectorizer(annotator, dictionary, {l:1 for l in tokenizer.alphabet}, gazetteers=None)
 
-# word embeddings
+# Load word embeddings based on dictionary sequence
 params['word_embeddings'] = hlp.getWordVectors(model, vectorizer.inverseDictionary)
 params['no_vector_count'] = len(vectorizer.inverseDictionary) - model.wv.syn0.shape[0]
 
 # create datasets and dataset iterators
-creator = MWTDatasetCreator(tokenizer, vectorizer, 60, 32)
+creator = MWTDatasetCreator(tokenizer, vectorizer, params['sent_length'], params['word_length'])
 # train
-dataset_train = creator.createDataset(train_files, tmp_train).shuffle(10000).batch(batch_size)
+dataset_train, num_samples_train = creator.createDataset(train_files, tmp_train)
+dataset_train = dataset_train.shuffle(num_samples_train).batch(batch_size)
 iterator_train = dataset_train.make_initializable_iterator()
 next_train = iterator_train.get_next()
 # test
-dataset_test = creator.createDataset(test_files, tmp_test).batch(batch_size)
+dataset_test, num_samples_test = creator.createDataset(test_files, tmp_test)
+dataset_test = dataset_test.batch(batch_size)
 iterator_test = dataset_test.make_initializable_iterator()
 next_test = iterator_test.get_next()
 # development/validation
-dataset_val = creator.createDataset(val_files, tmp_val).batch(batch_size)
+dataset_val, num_samples_val = creator.createDataset(val_files, tmp_val)
+dataset_val = dataset_val.batch(batch_size)
 iterator_val = dataset_val.make_initializable_iterator()
 next_val = iterator_val.get_next()
 
-with EntityModel(params, word_features='emb', char_features='boc', LM=None) as clf:
+with EntityModel(params, word_features='emb', char_features='boc', LM=None, gazetteers=False) as clf:
   
   no_imp_ep_count = 0
   best_accuracy = 0
   best_performance = 0
   best_sent_accuracy = 0
   best_epoch = 0
-  
   epoch_times = []
+  
+  # For each epoch, train on the whole training set once
+  # and validate on the validation set once
   for ep in range(0,num_epochs):
     epoch_start_time = time.time()
     clf.getSession().run(iterator_train.initializer)
     clf.getSession().run(iterator_dev.initializer)
-    performance = runNext(next_train, clf, train=True)
+    performance = hlp.runMWTDataset(next_train, num_samples_train, clf, train=True)
     print("Train loss at Epoch", ep, ":", performance['loss'])
     #print("Train label counts: ", performance['label_counts'])
     print("Train accuracy: {:.3%}".format(performance['accuracy']))
@@ -176,14 +176,14 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None) as c
     print("Train recall: {:.3%}".format(performance['recall']))
     print("Train F1: {:.3%}".format(performance['F1']))
     print("                                                ", end='\r')
-    performance = runNext(next_dev, clf)
-    print("Devset loss at Epoch", ep, ":", performance['loss'])
-    #print("Devset label counts: ", performance['label_counts'])
-    print("Devset accuracy: {:.3%}".format(performance['accuracy']))
-    #print("Devset sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
-    #print("Devset precision: {:.3%}".format(performance['precision']))
-    #print("Devset recall: {:.3%}".format(performance['recall']))
-    print("Devset F1: {:.3%}".format(performance['F1']))
+    performance = hlp.runMWTDataset(next_val, num_samples_val, clf)
+    print("Validation loss at Epoch", ep, ":", performance['loss'])
+    #print("Validation label counts: ", performance['label_counts'])
+    print("Validation accuracy: {:.3%}".format(performance['accuracy']))
+    print("Validation sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
+    print("Validation precision: {:.3%}".format(performance['precision']))
+    print("Validation recall: {:.3%}".format(performance['recall']))
+    print("Validation F1: {:.3%}".format(performance['F1']))
     if performance[performance_metric] > best_performance:
       no_imp_ep_count = 0
       best_accuracy = performance['accuracy']
@@ -210,7 +210,7 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None) as c
   clf.restoreModel(TMP_MODEL)
   print("Model restored.")
   clf.getSession().run(iterator_test.initializer)
-  performance = runNext(next_test, clf)
+  performance = hlp.runMWTDataset(next_test, num_samples_test, clf)
   print("Testset loss at Epoch", best_epoch, ":", performance['loss'])
   print("Testset label counts: ", performance['label_counts'])
   print("Testset accuracy: {:.3%}".format(performance['accuracy']))

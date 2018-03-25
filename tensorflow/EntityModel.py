@@ -9,6 +9,7 @@ import random
 class EntityModel:
   
   def __init__(self, params, word_features='emb', char_features='boc', LM='emb', gazetteers=True):
+    self.gazetteers = gazetteers
     self.session = tf.Session()
     # implement exponential learning rate decay
     # optimizer gets called with this learning_rate and updates
@@ -209,14 +210,12 @@ class EntityModel:
     self.closeSession()
   
   def run(self, data, train=False):
-    data = {
+    feed_dict = {
         self.sentences: data['sentences'],
         self.labels: data['labels'],
         self.sent_lengths: data['sent_lengths'],
-        self.label_names: data['label_names'],
         self.sentences_chars: data['sentence_chars'],
         self.word_lengths: data['word_lengths'],
-        self.gazetteers_binary: data['gazetteers'],
         self.dropout_05: 1.0,
         self.dropout_08: 1.0
     }
@@ -227,11 +226,13 @@ class EntityModel:
       'prediction':self.pred_classes,
       'crf_decode':self.decode_tags
     }
+    if self.gazetteers:
+      feed_dict[self.gazetteers_binary] = data['gazetteers']
     if train:
       fetches['train_step'] = self.train_step
-      data[self.dropout_05] = 0.5
-      data[self.dropout_08] = 0.8
-    return self.session.run(fetches, feed_dict=data)
+      feed_dict[self.dropout_05] = 0.5
+      feed_dict[self.dropout_08] = 0.8
+    return self.session.run(fetches, feed_dict=feed_dict)
   
   def getSession(self):
     return self.session

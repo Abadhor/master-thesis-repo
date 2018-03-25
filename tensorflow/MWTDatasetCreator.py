@@ -102,5 +102,5 @@ class MWTDatasetCreator:
     print("End of preprocessing")
     dataset = tf.data.TFRecordDataset([out_file])
     dataset = dataset.map(self._parse_proto)
-    return dataset
+    return dataset, len(tokenized_sentences)
  

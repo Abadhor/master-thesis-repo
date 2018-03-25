@@ -1,5 +1,5 @@
 
-
+from Preprocessing import MWUAnnotator
 
 class TrainHelpers:
   
@@ -50,30 +50,26 @@ class TrainHelpers:
     return emb_out
   
   @staticmethod
-  def getMWTs(label_dict, sentence):
+  def getMWTs(sentence):
     # get MWTs in a vectorized sentence
     MWTs = []
     B_idx = None
     for idx, t in enumerate(sentence):
-      if t == label_dict['B']:
+      if t == MWUAnnotator.label_dictionary['B']:
         B_idx = idx
-      elif t == label_dict['L']:
+      elif t == MWUAnnotator.label_dictionary['L']:
         if B_idx != None:
           MWTs.append((B_idx,idx))
         B_idx = None
     return MWTs
   
   @staticmethod
-  def countLabels(label_dict, sentence, sent_length, counts_dict):
+  def countLabels(sentence, sent_length, counts_dict):
     for t in range(sent_length):
-      if sentence[t] == label_dict['B']:
-        counts_dict['B'] += 1
-      if sentence[t] == label_dict['I']:
-        counts_dict['I'] += 1
-      if sentence[t] == label_dict['L']:
-        counts_dict['L'] += 1
-      if sentence[t] == label_dict['O']:
-        counts_dict['O'] += 1
+      if sentence[t] not in counts_dict:
+        counts_dict[sentence[t]] = 1
+      else:
+        counts_dict[sentence[t]] += 1
   
   @staticmethod
   def getScores(TP,FP,FN):
@@ -115,9 +111,8 @@ class TrainHelpers:
     return batches
   
   @staticmethod
-  def runNext(next_element, classifier, train=False):
+  def runMWTDataset(next_element_tensor, num_samples, classifier, train=False):
     # batch validation
-    num_samples = sum([len(b) for b in batches['data']])
     losses = 0
     accuracies = 0
     s_accuracies = 0
@@ -125,10 +120,12 @@ class TrainHelpers:
     GT_count = 0
     TP_count = 0
     FP_count = 0
-    count_dict = {x:0 for x in meta['labelNames']}
+    counts_dict = {}
+    b = 1
     while True:
         try:
-          features, labels = classifier.getSession().run(next_element)
+          features, labels = classifier.getSession().run(next_element_tensor)
+          print("Batch:", b, end='\r')
           data = {
             'sentences': features['tokens'],
             'labels': labels,
@@ -136,6 +133,7 @@ class TrainHelpers:
             'sentence_chars': features['chars'],
             'word_lengths': features['char_lengths']
           }
+          # normalize performance based on batch length
           fetched = classifier.run(data, train=train)
           losses += fetched['loss_value'] * len(features['tokens'])
           accuracies += fetched['accuracy_value'] * len(features['tokens'])
@@ -149,7 +147,7 @@ class TrainHelpers:
               GT_set.add(mwt)
             pred_s = fetched['crf_decode'][idx]
             predictions = TrainHelpers.getMWTs(pred_s)
-            TrainHelpers.countLabels(pred_s, features['length'][idx], count_dict)
+            TrainHelpers.countLabels(pred_s, features['length'][idx], counts_dict)
             for mwt in predictions:
               if mwt in GT_set:
                 TP_count += 1
@@ -169,7 +167,7 @@ class TrainHelpers:
       'precision': precision,
       'recall': recall,
       'F1': F1,
-      'label_counts':count_dict
+      'label_counts':counts_dict
     }
     return performance
   
