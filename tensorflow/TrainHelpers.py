@@ -1,6 +1,7 @@
 
 from Preprocessing import MWUAnnotator
 import numpy as np
+import tensorflow as tf
 
 class TrainHelpers:
   
@@ -8,6 +9,7 @@ class TrainHelpers:
   def getWordVectors(gensim_model, inverse_dictionary):
     # create matrix with word embeddings, indexed based on the collection dictionary
     #no_vector_count = len(inverse_dictionary) - gensim_model.wv.syn0.shape[0]
+    print("Loading word vectors...")
     word_vectors = np.zeros(gensim_model.wv.syn0.shape)
     for i in range(gensim_model.wv.syn0.shape[0]):
       #print("Vector:", i+1, "/", gensim_model.wv.syn0.shape[0], end='\r')
@@ -19,6 +21,7 @@ class TrainHelpers:
         v = np.zeros((1,gensim_model.wv.syn0.shape[1]))
         word_vectors[i,:] = v
     print()
+    print("Word vectors loaded!")
     return word_vectors
   
   @staticmethod
@@ -126,7 +129,7 @@ class TrainHelpers:
     while True:
         try:
           features, labels = classifier.getSession().run(next_element_tensor)
-          print("Batch:", b, end='\r')
+          #print("Batch:", b, end='\r')
           data = {
             'sentences': features['tokens'],
             'labels': labels,
@@ -154,10 +157,11 @@ class TrainHelpers:
                 TP_count += 1
               else:
                 FP_count += 1
+          b += 1
         except tf.errors.OutOfRangeError:
           break
     FN_count = GT_count - TP_count
-    precision, recall, F1 = getScores(TP_count, FP_count, FN_count)
+    precision, recall, F1 = TrainHelpers.getScores(TP_count, FP_count, FN_count)
     losses_avg = losses/num_samples
     accuracy_avg = accuracies/num_samples
     sentence_accuracy_avg = s_accuracies/num_samples

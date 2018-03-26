@@ -194,10 +194,33 @@ class EntityModel:
     # run init_op
     init_op.run(session=self.session)
     if word_features=='emb':
-      self.session.run(self.init_embeddings, feed_dict={self.embedding_placeholder: params['word_embeddings']})
+      print("Initialize word embeddings...")
+      self.init_partitioned("word_embeddings", params['word_embeddings'])
+      print("Loaded word embeddings!")
     
     if LM=='emb':
+      print("Initialize language model...")
       self.session.run(self.init_LM_embeddings, feed_dict={self.LM_embedding_placeholder: params['LM_embeddings']})
+      print("Loaded language model!")
+  
+  """
+    https://stackoverflow.com/questions/46044437/loading-large-numpy-matrix-as-partitioned-variable-in-tensorflow-graph
+  """
+  def init_partitioned(self, var_name, data):
+    partitioned_var = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=var_name + "/part_\d+:0")
+    print("For {} founded {} parts".format(var_name, len(partitioned_var)))
+    
+    dtype = partitioned_var[0].dtype
+    part_shape = partitioned_var[0].get_shape().as_list()
+    part_shape[0] = None
+    
+    init = tf.placeholder(dtype, part_shape)
+    offset = 0
+    for idx, part in enumerate(partitioned_var):
+        init_op = tf.assign(part, init)
+        numRowsInPart = int(part.get_shape()[0])
+        self.session.run(init_op, feed_dict={init: data[offset:offset + numRowsInPart]})
+        offset += numRowsInPart
   
   def closeSession(self):
     self.session.close()
@@ -314,13 +337,12 @@ class EntityModel:
       )
       return outputs
   
+  
   def wordEmbeddings(self, params):
     # init word embeddings
     # zero for words with index greater wv_shape[0]
     wv_shape = params['word_embeddings'].shape
-    word_embeddings = tf.get_variable("word_embeddings",shape=wv_shape, trainable=False)
-    self.embedding_placeholder = tf.placeholder(tf.float32, shape=wv_shape)
-    self.init_embeddings = tf.assign(word_embeddings, self.embedding_placeholder)
+    word_embeddings = tf.get_variable("word_embeddings",shape=wv_shape, trainable=False, partitioner=tf.fixed_size_partitioner(4))
     self.token_features = tf.nn.embedding_lookup(word_embeddings, self.sentences)
     # trainable embeddings for unknown words
     # non-zero only for words with index greater wv_shape[0]

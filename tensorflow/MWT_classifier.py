@@ -53,12 +53,12 @@ params = {}
 params['sent_length'] = 60
 params['word_length'] = 32
 #params['hidden_size'] = 350
-params['hidden_size'] = 35
+params['hidden_size'] = 350
 params['boc_feature_size'] = 21
 # char CNN
 # 32->16, 16->8, 8->4, 4->2, 2->1
-#params['charCNN_layer_depths'] = [32, 64, 128, 256, 256]
-params['charCNN_layer_depths'] = [32, 32, 32, 32, 32]
+params['charCNN_layer_depths'] = [32, 64, 128, 256, 256]
+#params['charCNN_layer_depths'] = [32, 32, 32, 32, 32]
 params['char_dense_out_features'] = 50
 params['char_cnn_filter_width'] = 3
 params['char_cnn_out_features'] = 32
@@ -75,7 +75,7 @@ params['LM_hidden_size'] = 512
 
 # training parameters
 num_epochs = 600
-batch_size = 16
+batch_size = 32
 early_stopping_epoch_limit = 60
 performance_metric = 'F1'
 params['starter_learning_rate'] = 0.01
@@ -168,9 +168,10 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
   # For each epoch, train on the whole training set once
   # and validate on the validation set once
   for ep in range(0,num_epochs):
+    print("Epoch", ep, "training...")
     epoch_start_time = time.time()
     clf.getSession().run(iterator_train.initializer)
-    clf.getSession().run(iterator_dev.initializer)
+    clf.getSession().run(iterator_val.initializer)
     performance = hlp.runMWTDataset(next_train, num_samples_train, clf, train=True)
     print("Train loss at Epoch", ep, ":", performance['loss'])
     #print("Train label counts: ", performance['label_counts'])
