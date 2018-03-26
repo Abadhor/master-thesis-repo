@@ -1,15 +1,18 @@
 import tensorflow as tf
 import numpy as np
+import os
+import io
 
 class MWTDatasetCreator:
   
-  def __init__(self, tokenizer, vectorizer, maxSentLenght, maxWordLength):
+  def __init__(self, tokenizer, vectorizer, maxSentLenght, maxWordLength, cache_outfile=False):
     self.tokenizer = tokenizer
     self.vectorizer = vectorizer
     self.maxSentLenght = maxSentLenght
     self.maxWordLength = maxWordLength
+    self.cache_outfile = cache_outfile
   
-  def _get_sentences(self, files):
+  def _get_sentences(self, files, prefix):
     dataset = tf.data.TextLineDataset(files)
     get_next = dataset.make_one_shot_iterator().get_next()
     sents = []
@@ -19,7 +22,7 @@ class MWTDatasetCreator:
           line = sess.run(get_next).decode('utf-8')
           sents.extend(self.tokenizer.splitSentences(line))
         except tf.errors.OutOfRangeError:
-          print("Finished reading text files.")
+          print(prefix, "Finished reading text files.")
           break
     return sents
   
@@ -68,39 +71,51 @@ class MWTDatasetCreator:
     return parsed_features, labels
   
   
-  def createDataset(self, files, out_file):
-    tokenized_sentences = []
-    full_lengths = []
-    for idx, sent in enumerate(self._get_sentences(files)):
-      tokens = self.tokenizer.substituteTokenize(sent)
-      full_lengths.append(len(tokens))
-      tokenized_sentences.extend(self._split_sentences(tokens,idx))
-    full_lengths = np.array(full_lengths)
-    print("Finished tokenization")
-    print("Sentence Count:", len(full_lengths))
-    print("Sentence Count (Split):", len(tokenized_sentences))
-    print("Sentence Length Mean:", np.mean(full_lengths, axis=0))
-    print("Sentence Length Stdev:", np.std(full_lengths, axis=0))
-    
-    writer = tf.python_io.TFRecordWriter(out_file)
-    for sent in tokenized_sentences:
-      token_vector, length, label_vector, char_vector, char_lengths = self.vectorizer.vectorize(sent['tokens'], self.maxSentLenght, self.maxWordLength)
-      feature = {
-        'tokens': tf.train.Feature(int64_list=tf.train.Int64List(value=token_vector.flatten())),
-        'length': tf.train.Feature(int64_list=tf.train.Int64List(value=length.flatten())),
-        'labels': tf.train.Feature(int64_list=tf.train.Int64List(value=label_vector.flatten())),
-        'chars': tf.train.Feature(int64_list=tf.train.Int64List(value=char_vector.flatten())),
-        'char_lengths': tf.train.Feature(int64_list=tf.train.Int64List(value=char_lengths.flatten())),
-        'sentence_id': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_id'],)).flatten())),
-        'sentence_part_id': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_part_id'],)).flatten())),
-        'sentence_part_count': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_part_count'],)).flatten())),
-      }
-      example = tf.train.Example(features=tf.train.Features(feature=feature))
-      serialized = example.SerializeToString()
-      writer.write(serialized)
-    writer.close()
-    print("End of preprocessing")
+  def createDataset(self, files, out_file, prefix=""):
+    if not (self.cache_outfile and os.path.isfile(out_file) and os.path.isfile(out_file+'.len')):
+      tokenized_sentences = []
+      full_lengths = []
+      for idx, sent in enumerate(self._get_sentences(files, prefix)):
+        tokens = self.tokenizer.substituteTokenize(sent)
+        full_lengths.append(len(tokens))
+        tokenized_sentences.extend(self._split_sentences(tokens,idx))
+      full_lengths = np.array(full_lengths)
+      print(prefix,"Finished tokenization")
+      print(prefix,"Sentence Count:", len(full_lengths))
+      print(prefix,"Sentence Count (Split):", len(tokenized_sentences))
+      print(prefix,"Sentence Length Mean:", np.mean(full_lengths, axis=0))
+      print(prefix,"Sentence Length Stdev:", np.std(full_lengths, axis=0))
+      num_samples = len(tokenized_sentences)
+      with io.open(out_file+'.len', 'w', encoding='utf-8') as fp:
+        fp.write(str(num_samples))
+    # write to outfile
+      writer = tf.python_io.TFRecordWriter(out_file)
+      for sent in tokenized_sentences:
+        token_vector, length, label_vector, char_vector, char_lengths = self.vectorizer.vectorize(sent['tokens'], self.maxSentLenght, self.maxWordLength)
+        feature = {
+          'tokens': tf.train.Feature(int64_list=tf.train.Int64List(value=token_vector.flatten())),
+          'length': tf.train.Feature(int64_list=tf.train.Int64List(value=length.flatten())),
+          'labels': tf.train.Feature(int64_list=tf.train.Int64List(value=label_vector.flatten())),
+          'chars': tf.train.Feature(int64_list=tf.train.Int64List(value=char_vector.flatten())),
+          'char_lengths': tf.train.Feature(int64_list=tf.train.Int64List(value=char_lengths.flatten())),
+          'sentence_id': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_id'],)).flatten())),
+          'sentence_part_id': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_part_id'],)).flatten())),
+          'sentence_part_count': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_part_count'],)).flatten())),
+        }
+        example = tf.train.Example(features=tf.train.Features(feature=feature))
+        serialized = example.SerializeToString()
+        writer.write(serialized)
+      writer.close()
+      print(prefix,"End of preprocessing")
+    else:
+      with io.open(out_file+'.len', 'r', encoding='utf-8') as fp:
+        num_samples = int(fp.readline())
+    # read from outfile
     dataset = tf.data.TFRecordDataset([out_file])
     dataset = dataset.map(self._parse_proto)
-    return dataset, len(tokenized_sentences)
+    return dataset, num_samples
+  
+  def deleteOutfiles(self, out_file):
+    os.remove(out_file)
+    os.remove(out_file+'.len')
  

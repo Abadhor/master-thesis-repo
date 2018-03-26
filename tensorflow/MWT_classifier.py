@@ -4,6 +4,7 @@ import io
 from Preprocessing import Tokenizer, MWUAnnotator, Vectorizer
 from MWTDatasetCreator import MWTDatasetCreator
 from TrainHelpers import TrainHelpers as hlp
+from EntityModel import EntityModel
 from gensim.models.word2vec import Word2Vec
 import argparse
 import options
@@ -39,6 +40,7 @@ LM_DATA = "embeddings_char_cnn.npy"
 TMP_MODEL = "./tmp/model.ckpt"
 BEST_MODEL = "./models/best_model.session"
 
+cache_tmp = True
 tmp_train = "./tmp/tmp_train.tfrecord"
 tmp_test = "./tmp/tmp_test.tfrecord"
 tmp_val = "./tmp/tmp_val.tfrecord"
@@ -50,11 +52,13 @@ NEW_WORDS = ['.', ',', ';', '$', '(', ')', '§']
 params = {}
 params['sent_length'] = 60
 params['word_length'] = 32
-params['hidden_size'] = 350
+#params['hidden_size'] = 350
+params['hidden_size'] = 35
 params['boc_feature_size'] = 21
 # char CNN
 # 32->16, 16->8, 8->4, 4->2, 2->1
-params['charCNN_layer_depths'] = [32, 64, 128, 256, 512]
+#params['charCNN_layer_depths'] = [32, 64, 128, 256, 256]
+params['charCNN_layer_depths'] = [32, 32, 32, 32, 32]
 params['char_dense_out_features'] = 50
 params['char_cnn_filter_width'] = 3
 params['char_cnn_out_features'] = 32
@@ -71,7 +75,7 @@ params['LM_hidden_size'] = 512
 
 # training parameters
 num_epochs = 600
-batch_size = 64
+batch_size = 16
 early_stopping_epoch_limit = 60
 performance_metric = 'F1'
 params['starter_learning_rate'] = 0.01
@@ -135,19 +139,19 @@ params['word_embeddings'] = hlp.getWordVectors(model, vectorizer.inverseDictiona
 params['no_vector_count'] = len(vectorizer.inverseDictionary) - model.wv.syn0.shape[0]
 
 # create datasets and dataset iterators
-creator = MWTDatasetCreator(tokenizer, vectorizer, params['sent_length'], params['word_length'])
+creator = MWTDatasetCreator(tokenizer, vectorizer, params['sent_length'], params['word_length'], cache_tmp)
 # train
-dataset_train, num_samples_train = creator.createDataset(train_files, tmp_train)
-dataset_train = dataset_train.shuffle(num_samples_train).batch(batch_size)
+dataset_train, num_samples_train = creator.createDataset(train_files, tmp_train, "Train:")
+dataset_train = dataset_train.cache(tmp_train+".cache").shuffle(num_samples_train).batch(batch_size)
 iterator_train = dataset_train.make_initializable_iterator()
 next_train = iterator_train.get_next()
 # test
-dataset_test, num_samples_test = creator.createDataset(test_files, tmp_test)
+dataset_test, num_samples_test = creator.createDataset(test_files, tmp_test, "Test:")
 dataset_test = dataset_test.batch(batch_size)
 iterator_test = dataset_test.make_initializable_iterator()
 next_test = iterator_test.get_next()
 # development/validation
-dataset_val, num_samples_val = creator.createDataset(val_files, tmp_val)
+dataset_val, num_samples_val = creator.createDataset(val_files, tmp_val, "Val:")
 dataset_val = dataset_val.batch(batch_size)
 iterator_val = dataset_val.make_initializable_iterator()
 next_val = iterator_val.get_next()
@@ -223,9 +227,10 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
   print("Best Model saved in file: %s" % save_path)
 
 # clean-up
-os.remove(tmp_train)
-os.remove(tmp_test)
-os.remove(tmp_val)
+if not cache_tmp:
+  creator.deleteOutfiles(tmp_train)
+  creator.deleteOutfiles(tmp_test)
+  creator.deleteOutfiles(tmp_val)
 
 
 

@@ -1,5 +1,6 @@
 
 from Preprocessing import MWUAnnotator
+import numpy as np
 
 class TrainHelpers:
   
@@ -9,7 +10,7 @@ class TrainHelpers:
     #no_vector_count = len(inverse_dictionary) - gensim_model.wv.syn0.shape[0]
     word_vectors = np.zeros(gensim_model.wv.syn0.shape)
     for i in range(gensim_model.wv.syn0.shape[0]):
-      print("Vector:", i+1, "/", gensim_model.wv.syn0.shape[0], end='\r')
+      #print("Vector:", i+1, "/", gensim_model.wv.syn0.shape[0], end='\r')
       word = inverse_dictionary[i]
       if word in gensim_model.wv:
         v = gensim_model.wv[word].reshape((1,gensim_model.wv.syn0.shape[1]))

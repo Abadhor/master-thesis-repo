@@ -126,6 +126,7 @@ class EntityModel:
       # add gazetteers to layer 2 output
       final_dense_inputs = tf.concat([layer2, gazetteers_dense], axis=2, name="final_dense_inputs")
     else:
+      params['gazetteers_dense_size'] = 0
       final_dense_inputs = layer2
     
     # pass the final state into this linear function to multiply it 
@@ -252,6 +253,7 @@ class EntityModel:
       b = tf.get_variable("bias", (output_depth), initializer=tf.constant_initializer(0.0))
     return tf.matmul(input_, W) + b
   
+  """
   # Create a weight matrix + bias layer
   # with duplicated matrix for each batch entry
   # input shape [batch_size, sent_length, input_depth] -->
@@ -263,7 +265,7 @@ class EntityModel:
       W = tf.tile(W, multiples=[cur_batch_size,1,1])
       b = tf.get_variable("bias", (output_depth), initializer=tf.constant_initializer(0.0))
     return tf.transpose(tf.matmul(W, tf.transpose(input_, perm=[0,2,1])),perm=[0,2,1]) + b
-  
+  """
   
   def createBiDirectionalLSTMLayer(self, lstm_inputs, hidden_size, sent_lengths, scope, concat=True):
     with tf.variable_scope(scope): 
