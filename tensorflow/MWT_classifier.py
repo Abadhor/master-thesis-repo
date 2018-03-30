@@ -76,12 +76,13 @@ params['LM_hidden_size'] = 512
 # training parameters
 num_epochs = 600
 batch_size = 32
-early_stopping_epoch_limit = 60
-performance_metric = 'F1'
+early_stopping_epoch_limit = 10 #60
+#performance_metric = 'F1'
+performance_metric = 'recall'
 params['starter_learning_rate'] = 0.01
 params['l2-coefficient'] = 0.01
 params['grad_clip_norm'] = 5.0
-params['decay_steps'] = 200
+params['decay_steps'] = 50 #200
 params['decay_rate'] = 0.96
 
 
@@ -135,7 +136,8 @@ annotator = MWUAnnotator(mwt_tokens_list)
 vectorizer = Vectorizer(annotator, dictionary, {l:1 for l in tokenizer.alphabet}, gazetteers=None)
 
 # Load word embeddings based on dictionary sequence
-params['word_embeddings'] = hlp.getWordVectors(model, vectorizer.inverseDictionary)
+word_embeddings = hlp.getWordVectors(model, vectorizer.inverseDictionary)
+params['word_embeddings_shape'] = word_embeddings.shape
 params['no_vector_count'] = len(vectorizer.inverseDictionary) - model.wv.syn0.shape[0]
 
 # create datasets and dataset iterators
@@ -157,6 +159,7 @@ iterator_val = dataset_val.make_initializable_iterator()
 next_val = iterator_val.get_next()
 
 with EntityModel(params, word_features='emb', char_features='boc', LM=None, gazetteers=False) as clf:
+  clf.load_word_embeddings(word_embeddings)
   
   no_imp_ep_count = 0
   best_accuracy = 0
@@ -172,7 +175,7 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
     epoch_start_time = time.time()
     clf.getSession().run(iterator_train.initializer)
     clf.getSession().run(iterator_val.initializer)
-    performance = hlp.runMWTDataset(next_train, num_samples_train, clf, train=True)
+    performance = hlp.runMWTDataset(next_train, num_samples_train, clf, 'train')
     print("Train loss at Epoch", ep, ":", performance['loss'])
     #print("Train label counts: ", performance['label_counts'])
     print("Train accuracy: {:.3%}".format(performance['accuracy']))
@@ -181,7 +184,7 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
     print("Train recall: {:.3%}".format(performance['recall']))
     print("Train F1: {:.3%}".format(performance['F1']))
     print("                                                ", end='\r')
-    performance = hlp.runMWTDataset(next_val, num_samples_val, clf)
+    performance = hlp.runMWTDataset(next_val, num_samples_val, clf, 'eval')
     print("Validation loss at Epoch", ep, ":", performance['loss'])
     #print("Validation label counts: ", performance['label_counts'])
     print("Validation accuracy: {:.3%}".format(performance['accuracy']))
@@ -215,7 +218,7 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
   clf.restoreModel(TMP_MODEL)
   print("Model restored.")
   clf.getSession().run(iterator_test.initializer)
-  performance = hlp.runMWTDataset(next_test, num_samples_test, clf)
+  performance = hlp.runMWTDataset(next_test, num_samples_test, clf, 'eval')
   print("Testset loss at Epoch", best_epoch, ":", performance['loss'])
   print("Testset label counts: ", performance['label_counts'])
   print("Testset accuracy: {:.3%}".format(performance['accuracy']))

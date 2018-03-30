@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.ops import variable_scope as vs
 import math
 import pickle
 import numpy as np
@@ -70,7 +71,7 @@ class EntityModel:
     
     # word embeddings
     if word_features=='emb':
-      self.wordEmbeddings(params)
+      self.create_word_embeddings(params)
     elif word_features=='bow':
       self.BOW(params)
     else:
@@ -138,8 +139,14 @@ class EntityModel:
         
     # Compute the log-likelihood of the gold sequences and keep the transition
     # params for inference at test time.
-    log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(
-        class_scores, self.labels, self.sent_lengths)
+    transition_params = vs.get_variable(
+      "transitions", 
+      shape=[params['num_classes'], params['num_classes']])
+    log_likelihood, _ = tf.contrib.crf.crf_log_likelihood(
+        class_scores, 
+        self.labels, 
+        self.sent_lengths, 
+        transition_params=transition_params)
     
     self.decode_tags, best_score = tf.contrib.crf.crf_decode(class_scores, transition_params, self.sent_lengths)
     
@@ -193,10 +200,6 @@ class EntityModel:
 
     # run init_op
     init_op.run(session=self.session)
-    if word_features=='emb':
-      print("Initialize word embeddings...")
-      self.init_partitioned("word_embeddings", params['word_embeddings'])
-      print("Loaded word embeddings!")
     
     if LM=='emb':
       print("Initialize language model...")
@@ -233,29 +236,34 @@ class EntityModel:
       print(exception_type, exception_value, traceback)
     self.closeSession()
   
-  def run(self, data, train=False):
+  def run(self, data, mode='eval'):
     feed_dict = {
         self.sentences: data['sentences'],
-        self.labels: data['labels'],
         self.sent_lengths: data['sent_lengths'],
         self.sentences_chars: data['sentence_chars'],
         self.word_lengths: data['word_lengths'],
         self.dropout_05: 1.0,
         self.dropout_08: 1.0
     }
-    fetches = {
-      'loss_value':self.loss,
-      'accuracy_value':self.accuracy,
-      'sentence_accuracy_value':self.sentence_accuracy,
-      'prediction':self.pred_classes,
-      'crf_decode':self.decode_tags
-    }
     if self.gazetteers:
       feed_dict[self.gazetteers_binary] = data['gazetteers']
-    if train:
+    if mode == 'eval' or mode == 'train':
+      feed_dict[self.labels] = data['labels']
+      fetches = {
+        'loss_value':self.loss,
+        'accuracy_value':self.accuracy,
+        'sentence_accuracy_value':self.sentence_accuracy,
+        #'prediction':self.pred_classes,
+        'crf_decode':self.decode_tags
+      }
+    if mode == 'train':
       fetches['train_step'] = self.train_step
       feed_dict[self.dropout_05] = 0.5
       feed_dict[self.dropout_08] = 0.8
+    if mode == 'predict':
+      fetches = {
+        'crf_decode':self.decode_tags
+      }
     return self.session.run(fetches, feed_dict=feed_dict)
   
   def getSession(self):
@@ -338,10 +346,10 @@ class EntityModel:
       return outputs
   
   
-  def wordEmbeddings(self, params):
+  def create_word_embeddings(self, params):
     # init word embeddings
     # zero for words with index greater wv_shape[0]
-    wv_shape = params['word_embeddings'].shape
+    wv_shape = params['word_embeddings_shape']
     word_embeddings = tf.get_variable("word_embeddings",shape=wv_shape, trainable=False, partitioner=tf.fixed_size_partitioner(4))
     self.token_features = tf.nn.embedding_lookup(word_embeddings, self.sentences)
     # trainable embeddings for unknown words
@@ -352,6 +360,11 @@ class EntityModel:
     extra_idx = self.sentences - word_embeddings_vocab_const
     extra_features = tf.nn.embedding_lookup(extra_word_embeddings, extra_idx)
     self.token_features = self.token_features + extra_features
+  
+  def load_word_embeddings(self, embeddings):
+    print("Initialize word embeddings...")
+    self.init_partitioned("word_embeddings", embeddings)
+    print("Loaded word embeddings!")
   
   def LM_wordEmbeddings(self, params):
     # init word embeddings

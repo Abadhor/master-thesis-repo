@@ -134,13 +134,13 @@ class Vectorizer:
     else:
       self.gazetteers = None
   
-  def tokenVectorize(self, tokens, maxSentLenght):
+  def token_vectorize(self, tokens, maxSentLength):
     # Returns the sentence as a vector
     # Not-in-dictionary token ID = len(self.dictionary)
     # Padding token ID = len(self.dictionary) + 1
-    token_vector = np.full((1,maxSentLenght), len(self.dictionary)+1, dtype='int32')
+    token_vector = np.full((1,maxSentLength), len(self.dictionary)+1, dtype='int32')
     for t_idx, token in enumerate(tokens):
-      if t_idx >= maxSentLenght:
+      if t_idx >= maxSentLength:
         break
       if token not in self.dictionary:
         token_vector[0,t_idx] = len(self.dictionary)
@@ -148,23 +148,38 @@ class Vectorizer:
         token_vector[0,t_idx] = self.dictionary[token]
     return token_vector
   
-  def labelVectorize(self, tokens, maxSentLenght):
+  def token_devectorize(self, token_vector, ukn_token):
+    # Returns the vector as a sentence
+    # Not-in-dictionary token ID = len(self.dictionary)
+    # Padding token ID = len(self.dictionary) + 1
+    tokens = []
+    for t_idx in range(token_vector.shape[1]):
+      if token_vector[0,t_idx] == len(self.dictionary):
+        tokens.append(ukn_token)
+      elif token_vector[0,t_idx] == len(self.dictionary) + 1:
+        break
+      else:
+        tokens.append(self.inverseDictionary[token_vector[0,t_idx]])
+  
+  def label_vectorize(self, tokens, maxSentLength):
+    # Returns the sentence as a label vector
+    # Padding label ID = len(self.annotator.LABEL_NAMES)
     labels = self.annotator.getLabels(tokens)
-    label_vector = np.full((1,maxSentLenght), len(self.annotator.LABEL_NAMES), dtype='int32')
+    label_vector = np.full((1,maxSentLength), len(self.annotator.LABEL_NAMES), dtype='int32')
     for l_idx, label in enumerate(labels):
-      if l_idx >= maxSentLenght:
+      if l_idx >= maxSentLength:
         break
       label_vector[0,l_idx] = self.annotator.getLabelID(label)
     return label_vector
   
-  def characterVectorize(self, tokens, maxSentLenght, maxWordLength):
+  def character_vectorize(self, tokens, maxSentLength, maxWordLength):
     # Returns the sentence as a list of char vectors
     # and the char vector lengths
     # Padding char ID = len(self.dictionary)
-    char_vector = np.full((1,maxSentLenght,maxWordLength), len(self.alphabet), dtype='int32')
-    lengths = np.zeros((1, maxSentLenght), dtype='int32')
+    char_vector = np.full((1,maxSentLength,maxWordLength), len(self.alphabet), dtype='int32')
+    lengths = np.zeros((1, maxSentLength), dtype='int32')
     for t_idx, token in enumerate(tokens):
-      if t_idx >= maxSentLenght:
+      if t_idx >= maxSentLength:
         break
       for c_idx, c in enumerate(token):
         if c_idx >= maxWordLength:
@@ -173,10 +188,10 @@ class Vectorizer:
       lengths[0, t_idx] = min(len(token), maxWordLength)
     return char_vector, lengths
   
-  def gazetteerVectorize(self, tokens, maxSentLenght):
-    gaz_vector = np.zeros((1,maxSentLenght,len(self.gazetteers)), dtype='int32')
+  def gazetteer_vectorize(self, tokens, maxSentLength):
+    gaz_vector = np.zeros((1,maxSentLength,len(self.gazetteers)), dtype='int32')
     for token_id in range(len(tokens)):
-      if token_id >= maxSentLenght:
+      if token_id >= maxSentLength:
         break
       found_gaz = self.gazetteers.getAll(tokens[token_id:])
       for gaz in found_gaz:
@@ -185,12 +200,12 @@ class Vectorizer:
           gaz_data[0, token_id+i, gaz_id] = 1
     return gaz_vector
   
-  def vectorize(self, tokens, maxSentLenght, maxWordLength):
-    token_vector = self.tokenVectorize(tokens, maxSentLenght)
-    label_vector = self.labelVectorize(tokens, maxSentLenght)
-    char_vector, char_lengths = self.characterVectorize(tokens, maxSentLenght, maxWordLength)
+  def vectorize(self, tokens, maxSentLength, maxWordLength):
+    token_vector = self.token_vectorize(tokens, maxSentLength)
+    label_vector = self.label_vectorize(tokens, maxSentLength)
+    char_vector, char_lengths = self.character_vectorize(tokens, maxSentLength, maxWordLength)
     if self.gazetteers != None:
-      gazetteer_vector = gazetteerVectorize(tokens, maxSentLenght)
+      gazetteer_vector = gazetteer_vectorize(tokens, maxSentLength)
       return token_vector, np.array((len(tokens),)), label_vector, char_vector, char_lengths, gazetteer_vector
     return token_vector, np.array((len(tokens),)), label_vector, char_vector, char_lengths
     

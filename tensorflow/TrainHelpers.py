@@ -115,7 +115,7 @@ class TrainHelpers:
     return batches
   
   @staticmethod
-  def runMWTDataset(next_element_tensor, num_samples, classifier, train=False):
+  def runMWTDataset(next_element_tensor, num_samples, classifier, mode):
     # batch validation
     losses = 0
     accuracies = 0
@@ -138,7 +138,7 @@ class TrainHelpers:
             'word_lengths': features['char_lengths']
           }
           # normalize performance based on batch length
-          fetched = classifier.run(data, train=train)
+          fetched = classifier.run(data, mode=mode)
           losses += fetched['loss_value'] * len(features['tokens'])
           accuracies += fetched['accuracy_value'] * len(features['tokens'])
           s_accuracies += fetched['sentence_accuracy_value'] * len(features['tokens'])
