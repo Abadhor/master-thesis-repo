@@ -1,6 +1,7 @@
 import os
 import pickle
 import io
+import json
 from Preprocessing import Tokenizer, MWUAnnotator, Vectorizer
 from MWTDatasetCreator import MWTDatasetCreator
 from TrainHelpers import TrainHelpers as hlp
@@ -39,6 +40,8 @@ LM_DATA = "embeddings_char_cnn.npy"
 
 TMP_MODEL = "./tmp/model.ckpt"
 BEST_MODEL = "./models/best_model.session"
+DICTIONARY = "./models/dictionary"
+PARAMS = "./models/params"
 
 cache_tmp = True
 tmp_train = "./tmp/tmp_train.tfrecord"
@@ -50,15 +53,13 @@ NEW_WORDS = ['.', ',', ';', '$', '(', ')', '§']
 
 # model parameters
 params = {}
-params['sent_length'] = 60
+params['sent_length'] = 75
 params['word_length'] = 32
-#params['hidden_size'] = 350
 params['hidden_size'] = 350
 params['boc_feature_size'] = 21
 # char CNN
 # 32->16, 16->8, 8->4, 4->2, 2->1
 params['charCNN_layer_depths'] = [32, 64, 128, 256, 256]
-#params['charCNN_layer_depths'] = [32, 32, 32, 32, 32]
 params['char_dense_out_features'] = 50
 params['char_cnn_filter_width'] = 3
 params['char_cnn_out_features'] = 32
@@ -76,13 +77,13 @@ params['LM_hidden_size'] = 512
 # training parameters
 num_epochs = 600
 batch_size = 32
-early_stopping_epoch_limit = 10 #60
+early_stopping_epoch_limit = 60
 #performance_metric = 'F1'
 performance_metric = 'recall'
 params['starter_learning_rate'] = 0.01
 params['l2-coefficient'] = 0.01
 params['grad_clip_norm'] = 5.0
-params['decay_steps'] = 50 #200
+params['decay_steps'] = 200
 params['decay_rate'] = 0.96
 
 
@@ -92,6 +93,11 @@ sample = random.sample(filenames, 4)
 test_files = sample[:2]
 val_files = sample[2:]
 train_files = [fname for fname in filenames if fname not in sample]
+print("------------------------------Train Files------------------------------")print(train_files)
+print("----------------------------Validation Files---------------------------")
+print(val_files)
+print("------------------------------Test Files-------------------------------")
+print(test_files)
 
 # load Multi Word Terms set from files
 with io.open(mwt_file, 'rb') as fp:
@@ -102,6 +108,11 @@ dictionary = model.wv.vocab
 dictionary = {k:v.count for k, v in dictionary.items()}
 for w in NEW_WORDS:
   dictionary[w] = 1
+
+# save dictionary to file
+with io.open(DICTIONARY, 'w', encoding='utf-8') as fp:
+  json.dump(dictionary, fp, ensure_ascii=False)
+
 
 # tokenizer and params
 tokenizer = Tokenizer()
@@ -133,7 +144,7 @@ mwt_tokens_list = [x for x in mwt_tokens_list if len(x) > 1]
 # Samples are stored in a temporary file as TFRecords
 annotator = MWUAnnotator(mwt_tokens_list)
 
-vectorizer = Vectorizer(annotator, dictionary, {l:1 for l in tokenizer.alphabet}, gazetteers=None)
+vectorizer = Vectorizer(dictionary, {l:1 for l in tokenizer.alphabet}, annotator=annotator, gazetteers=None)
 
 # Load word embeddings based on dictionary sequence
 word_embeddings = hlp.getWordVectors(model, vectorizer.inverseDictionary)
@@ -158,6 +169,11 @@ dataset_val = dataset_val.batch(batch_size)
 iterator_val = dataset_val.make_initializable_iterator()
 next_val = iterator_val.get_next()
 
+# save model params to file
+with io.open(PARAMS, 'w', encoding='utf-8') as fp:
+  json.dump(params, fp)
+
+# train + evaluate
 with EntityModel(params, word_features='emb', char_features='boc', LM=None, gazetteers=False) as clf:
   clf.load_word_embeddings(word_embeddings)
   

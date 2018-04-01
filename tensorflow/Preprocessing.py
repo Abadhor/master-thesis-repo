@@ -118,7 +118,7 @@ class Vectorizer:
     Translates words and other features to vectors based on dictionary and alphabet.
   """
   
-  def __init__(self, annotator, dictionary, alphabet, gazetteers=None):
+  def __init__(self, dictionary, alphabet, annotator=None, gazetteers=None):
     self.annotator = annotator
     # Unknown word index = len(dictionary)
     # Padding word index = len(dictionary)+1
@@ -202,7 +202,10 @@ class Vectorizer:
   
   def vectorize(self, tokens, maxSentLength, maxWordLength):
     token_vector = self.token_vectorize(tokens, maxSentLength)
-    label_vector = self.label_vectorize(tokens, maxSentLength)
+    if self.annotator != None:
+      label_vector = self.label_vectorize(tokens, maxSentLength)
+    else:
+      label_vector = None
     char_vector, char_lengths = self.character_vectorize(tokens, maxSentLength, maxWordLength)
     if self.gazetteers != None:
       gazetteer_vector = gazetteer_vectorize(tokens, maxSentLength)
