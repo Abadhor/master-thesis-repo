@@ -93,7 +93,8 @@ sample = random.sample(filenames, 4)
 test_files = sample[:2]
 val_files = sample[2:]
 train_files = [fname for fname in filenames if fname not in sample]
-print("------------------------------Train Files------------------------------")print(train_files)
+print("------------------------------Train Files------------------------------")
+print(train_files)
 print("----------------------------Validation Files---------------------------")
 print(val_files)
 print("------------------------------Test Files-------------------------------")
