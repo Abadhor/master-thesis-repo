@@ -107,7 +107,7 @@ class EntityModel:
     layer1_inputs = tf.concat([self.token_features, self.token_char_features],
     axis=2, name="layer1_inputs")
     
-    layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1')
+    layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1', keep_prob=self.dropout_05)
     
     # add LM to layer 1 output
     if LM == 'emb':
@@ -116,7 +116,7 @@ class EntityModel:
     else:
       layer2_inputs = layer1
     
-    layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l2')
+    layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l2', keep_prob=self.dropout_08)
     
     if gazetteers:
       # gazetteers layer
@@ -298,11 +298,13 @@ class EntityModel:
     return tf.transpose(tf.matmul(W, tf.transpose(input_, perm=[0,2,1])),perm=[0,2,1]) + b
   """
   
-  def createBiDirectionalLSTMLayer(self, lstm_inputs, hidden_size, sent_lengths, scope, concat=True):
+  def createBiDirectionalLSTMLayer(self, lstm_inputs, hidden_size, sent_lengths, scope, keep_prob=1.0, concat=True):
     with tf.variable_scope(scope): 
       # Create a forward and a backward LSTM layer for the bidirectional_dynamic_rnn
       fw = tf.contrib.rnn.BasicLSTMCell(hidden_size, state_is_tuple=True)
+      fw = tf.contrib.rnn.DropoutWrapper(fw, output_keep_prob=keep_prob)
       bw = tf.contrib.rnn.BasicLSTMCell(hidden_size, state_is_tuple=True)
+      bw = tf.contrib.rnn.DropoutWrapper(bw, output_keep_prob=keep_prob)
       
       # Returns a tuple (outputs, output_states) where:
       # outputs: A tuple (output_fw, output_bw) containing

@@ -61,7 +61,7 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
   print("Enter a sentence or type exit() to quit!")
   print("Sentence max length:", params['sent_length'], "Tokens")
   while True:
-    text = input()
+    text = input(">>> ")
     if text == "exit()":
       print("Exiting...")
       break

@@ -2,6 +2,7 @@ import os
 import pickle
 import io
 import json
+import sys
 from Preprocessing import Tokenizer, MWUAnnotator, Vectorizer
 from MWTDatasetCreator import MWTDatasetCreator
 from TrainHelpers import TrainHelpers as hlp
@@ -78,8 +79,8 @@ params['LM_hidden_size'] = 512
 num_epochs = 600
 batch_size = 32
 early_stopping_epoch_limit = 60
-#performance_metric = 'F1'
-performance_metric = 'recall'
+performance_metric = 'F1'
+#performance_metric = 'recall'
 params['starter_learning_rate'] = 0.01
 params['l2-coefficient'] = 0.01
 params['grad_clip_norm'] = 5.0
@@ -224,6 +225,7 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
     epoch_time = time.time() - epoch_start_time
     epoch_times.append(epoch_time)
     print("Epoch duration:", epoch_time)
+    sys.stdout.flush()
   print("                                                ", end='\r')
   print("Best Epoch:", best_epoch)
   print("Best accuracy: {:.3%}".format(best_accuracy))
