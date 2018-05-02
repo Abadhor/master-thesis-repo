@@ -9,8 +9,16 @@ import random
 
 class EntityModel:
   
-  def __init__(self, params, word_features='emb', char_features='boc', LM='emb', gazetteers=True):
+  def __init__(
+                self, 
+                params,
+                word_features='emb',
+                char_features='boc',
+                LM='emb',
+                pos_features='bow',
+                gazetteers=True):
     self.gazetteers = gazetteers
+    self.pos_features = pos_features
     self.session = tf.Session()
     # implement exponential learning rate decay
     # optimizer gets called with this learning_rate and updates
@@ -27,7 +35,7 @@ class EntityModel:
     # sentence in a batch,
     # second dimension sent_length for each word in the sentence.
     # Each word is represented by its index in the dictionary
-    # Note that we use 'None' instead of batch_size for the first dimsension.
+    # Note that we use 'None' instead of batch_size for the first dimension.
     # This allows us 
     # to deal with variable batch sizes
     self.sentences = tf.placeholder(tf.int32, [None, params['sent_length']], name="sentences")
@@ -36,9 +44,6 @@ class EntityModel:
     # the placeholder for labels has first dimension batch_size for each
     # sentence in a batch and
     # second dimension sent_length for each word in the sentence
-    # Note that we use 'None' instead of batch_size for the first dimsension.
-    # This allows us 
-    # to deal with variable batch sizes
     self.labels = tf.placeholder(tf.int32, [None, params['sent_length']], name="labels")
     
     
@@ -55,15 +60,18 @@ class EntityModel:
     # second dimension sent_length for each word in the sentence,
     # third dimension word_length for each char in a word
     # Each word is represented by its index in the dictionary
-    # Note that we use 'None' instead of batch_size for the first dimsension.
-    # This allows us 
-    # to deal with variable batch sizes
     self.sentences_chars = tf.placeholder(tf.int32, [None, params['sent_length'], params['word_length']], name="sentences_chars")
     
     # the placeholder for the lengths of each word
     self.word_lengths = tf.placeholder(tf.int32, [None, params['sent_length']], name="word_lengths")
     
     self.word_len_mask = tf.sequence_mask(self.word_lengths, maxlen=params['word_length'], dtype=tf.float32)
+    
+    # the placeholder for part-of-speech tags has 
+    # first dimension batch_size for each sentence in a batch,
+    # second dimension sent_length for each PoS tag in the sentence.
+    # Each tag is represented by its index in the tag dictionary
+    self.pos = tf.placeholder(tf.int32, [None, params['sent_length']], name="pos")
     
     if gazetteers:
       # placeholder for the binary gazetteers feature of each word
@@ -118,6 +126,8 @@ class EntityModel:
     
     layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l2', keep_prob=self.dropout_08)
     
+    final_dense_inputs_list = [layer2]
+    
     if gazetteers:
       # gazetteers layer
       gazetteers_dense_rs = tf.reshape(self.gazetteers_binary, [tf.shape(self.gazetteers_binary)[0]*params['sent_length'], params['gazetteer_count']],name="gazetteers_dense_rs")
@@ -125,10 +135,14 @@ class EntityModel:
       gazetteers_dense = tf.reshape(gazetteers_dense_activation, [tf.shape(self.gazetteers_binary)[0], params['sent_length'], params['gazetteers_dense_size']], name="gazetteers_dense_rs2")
       
       # add gazetteers to layer 2 output
-      final_dense_inputs = tf.concat([layer2, gazetteers_dense], axis=2, name="final_dense_inputs")
+      final_dense_inputs_list.append(gazetteers_dense)
     else:
       params['gazetteers_dense_size'] = 0
-      final_dense_inputs = layer2
+    
+    if pos_features == 'bow':
+      final_dense_inputs_list.append(tf.one_hot(self.pos,params['pos_depth']))
+    
+    final_dense_inputs = tf.concat(final_dense_inputs_list, axis=2, name="final_dense_inputs")
     
     # pass the final state into this linear function to multiply it 
     # by the weights and add bias to get our output.
@@ -136,7 +150,8 @@ class EntityModel:
     class_scores_rs_pre = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']], name="class_scores_rs_pre")
     class_scores_linear = self.linearLayer(class_scores_rs_pre, 2*params['hidden_size']+params['gazetteers_dense_size'], params['num_classes'], "output")
     class_scores = tf.reshape(class_scores_linear, [tf.shape(final_dense_inputs)[0],params['sent_length'], params['num_classes']], name="class_scores_rs2")
-        
+    
+    
     # Compute the log-likelihood of the gold sequences and keep the transition
     # params for inference at test time.
     transition_params = vs.get_variable(
@@ -247,6 +262,8 @@ class EntityModel:
     }
     if self.gazetteers:
       feed_dict[self.gazetteers_binary] = data['gazetteers']
+    if self.pos_features == 'bow':
+      feed_dict[self.pos] = data['pos']
     if mode == 'eval' or mode == 'train':
       feed_dict[self.labels] = data['labels']
       fetches = {

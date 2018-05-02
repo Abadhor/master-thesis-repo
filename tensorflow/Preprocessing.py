@@ -17,6 +17,10 @@ class Tokenizer:
       self.nlp = spacynlp
     self.alphabet = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ §'
     
+    self.POS_tags = {'ADJ','ADP','ADV','AUX','CONJ',
+    'CCONJ','DET','INTJ','NOUN','NUM','PART','PRON','PROPN','PUNCT',
+    'SCONJ','SYM','VERB','X','SPACE'}
+    
     # char replacements
     self.RE_UNKNOWN = re.compile('[^'+re.escape(self.alphabet)+']')
     self.RE_UNKNOWN_SUB = ' § '
@@ -63,11 +67,45 @@ class Tokenizer:
     # lemma to handle ending s
     # ending s is either noun plural or 3rd person singular verb
     # only take nouns
-    tokens = [x.lemma_ if x.tag_ in ["NN","NNS"] else x.text for x in doc]
+    tokens = [x.lemma_ if x.tag_ == "NNS" else x.text for x in doc]
     if cleanseHyphens:
       tokens = [self.substituteHyphen(x) for x in tokens]
     tokens = [x.strip() for x in tokens if len(x.strip()) > 0]
     return tokens
+  
+  def substituteTokenize_with_POS(self, inputtext, cleanseHyphens=True):
+    text = self.substituteNewline(inputtext)
+    text = self.substituteUnknown(text)
+    text = self.substituteBrackets(text)
+    text = self.substituteNumbers(text)
+    text = text.lower()
+    doc = self.nlp(text)
+    # lemma to handle ending s
+    # ending s is either noun plural or 3rd person singular verb
+    # only take nouns
+    tags = [x.pos_ if x.pos_ in self.POS_tags else 'X' for x in doc]
+    tokens = [x.lemma_ if x.tag_ == "NNS" else x.text for x in doc]
+    zipped = list(zip(tokens, tags))
+    if cleanseHyphens:
+      zipped = [(self.substituteHyphen(x[0]),x[1]) for x in zipped]
+    zipped = [(x[0].strip(),x[1]) for x in zipped if len(x[0].strip()) > 0]
+    #tokens, tags = tuple(zip(*zipped)) #unzip
+    return zipped
+  
+  def POS2Char(self, pos_list):
+    new_list = []
+    for p in pos_list:
+      if p == "ADJ":
+        new_list.append('a')
+      elif p == "NOUN":
+        new_list.append('n')
+      elif p == "PROPN":
+        new_list.append('n')
+      elif p == "ADP":
+        new_list.append('p')
+      else:
+        new_list.append('o')
+    return "".join(new_list)
 
 class MWUAnnotator:
   """

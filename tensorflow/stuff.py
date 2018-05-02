@@ -203,3 +203,45 @@ classifier.train(input_fn, hooks=[MyHook()], steps=5)
 classifier.evaluate(input_fn)
 classifier.predict(input_fn)
 
+# filter1 = tf.get_variable("char_cnn_filter1",shape=
+      # [
+        # params['char_cnn_filter_width'],
+        # in_depth,
+        # out_depth
+      # ], dtype=tf.float32)
+filter1 = tf.constant(
+    [
+      [
+        [1,0,0],
+        [0,1,0]
+      ],
+      [
+        [0,0,2],
+        [0,0,0]
+      ],
+      [
+        [1,0,0],
+        [0,0,0]
+      ]
+    ],
+    dtype=tf.float32)
+input = tf.constant(
+    [
+      [
+        [0,1],
+        [1,0],
+        [0,1],
+        [1,0],
+        [0,1]
+      ]
+    ],
+    dtype=tf.float32)
+char_cnn1 = tf.nn.conv1d(
+        input,
+        filter1,
+        1,
+        padding='SAME',
+        data_format="NWC",
+        name="cnn1"
+      )
+s.run(char_cnn1)
