@@ -6,6 +6,8 @@
 packages.txt
 */data
 */language_model
+*/logs
+*/log
 options.py
 
 # IDEs and editors

@@ -112,20 +112,42 @@ class EntityModel:
     #self.token_char_features = self.simpleCharCNN(masked_char_embeddings, params)
     self.token_char_features = self.layeredCharCNN(masked_char_embeddings, params)
     
+    ################
+    # 1st LSTM Layer
+    ################
     layer1_inputs = tf.concat([self.token_features, self.token_char_features],
     axis=2, name="layer1_inputs")
     
     layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1', keep_prob=self.dropout_05)
     
+    ################
+    # 2nd LSTM layer
+    ################
+    layer2_inputs_list = [layer1]
+    
     # add LM to layer 1 output
     if LM == 'emb':
-      layer2_inputs = tf.concat([layer1, LM_features],
-      axis=2, name="layer2_inputs")
-    else:
-      layer2_inputs = layer1
+      layer2_inputs_list.append(LM_features)
     
-    layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l2', keep_prob=self.dropout_08)
+    if pos_features == 'bow':
+      layer2_inputs_list.append(tf.one_hot(self.pos,params['pos_depth']))
     
+    layer2_inputs = tf.concat(layer2_inputs_list, axis=2, name="layer2_inputs")
+    
+    layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l2', keep_prob=self.dropout_05)
+    
+    #############################
+    # experimental 3rd LSTM layer
+    #############################
+    """
+    layer3_inputs_list = [layer2]
+    layer3_inputs = tf.concat(layer3_inputs_list, axis=2, name="layer3_inputs")
+    
+    layer3 = self.createBiDirectionalLSTMLayer(layer3_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l3', keep_prob=self.dropout_08)
+    """
+    ###################
+    # final dense layer
+    ###################
     final_dense_inputs_list = [layer2]
     
     if gazetteers:
@@ -138,20 +160,27 @@ class EntityModel:
       final_dense_inputs_list.append(gazetteers_dense)
     else:
       params['gazetteers_dense_size'] = 0
-    
+
+    """
     if pos_features == 'bow':
       final_dense_inputs_list.append(tf.one_hot(self.pos,params['pos_depth']))
-    
+    else:
+      params['pos_depth'] = 0
+    """
     final_dense_inputs = tf.concat(final_dense_inputs_list, axis=2, name="final_dense_inputs")
     
     # pass the final state into this linear function to multiply it 
     # by the weights and add bias to get our output.
     # Shape of class_scores is [batch_size, sent_length, num_classes]
+    #class_scores_rs_pre = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']+params['pos_depth']], name="class_scores_rs_pre")
     class_scores_rs_pre = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']], name="class_scores_rs_pre")
+    #class_scores_linear = self.linearLayer(class_scores_rs_pre, 2*params['hidden_size']+params['gazetteers_dense_size']+params['pos_depth'], params['num_classes'], "output")
     class_scores_linear = self.linearLayer(class_scores_rs_pre, 2*params['hidden_size']+params['gazetteers_dense_size'], params['num_classes'], "output")
     class_scores = tf.reshape(class_scores_linear, [tf.shape(final_dense_inputs)[0],params['sent_length'], params['num_classes']], name="class_scores_rs2")
     
-    
+    ######################
+    # CRF Loss computation
+    ######################
     # Compute the log-likelihood of the gold sequences and keep the transition
     # params for inference at test time.
     transition_params = vs.get_variable(
@@ -263,7 +292,7 @@ class EntityModel:
     if self.gazetteers:
       feed_dict[self.gazetteers_binary] = data['gazetteers']
     if self.pos_features == 'bow':
-      feed_dict[self.pos] = data['pos']
+      feed_dict[self.pos] = data['pos_tags']
     if mode == 'eval' or mode == 'train':
       feed_dict[self.labels] = data['labels']
       fetches = {
@@ -431,7 +460,7 @@ class EntityModel:
       filter,
       1,
       padding='SAME',
-      data_format="NHWC",
+      data_format="NWC",
       name="char_cnn"
     )
     # dense layer after Char-CNN
@@ -509,7 +538,7 @@ class EntityModel:
         filter1,
         1,
         padding='SAME',
-        data_format="NHWC",
+        data_format="NWC",
         name="cnn1"
       )
       char_cnn2 = tf.nn.conv1d(
@@ -517,7 +546,7 @@ class EntityModel:
         filter2,
         1,
         padding='SAME',
-        data_format="NHWC",
+        data_format="NWC",
         name="cnn2"
       )
       # Pool

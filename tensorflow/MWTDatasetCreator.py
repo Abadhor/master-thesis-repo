@@ -26,8 +26,8 @@ class MWTDatasetCreator:
           break
     return sents
   
-  def _split_sentences(self, tokens, sentence_id):
-    length = len(tokens)
+  def _split_sentences(self, z_tokens, sentence_id):
+    length = len(z_tokens)
     sentences = []
     sentence_count = (length // self.maxSentLenght)
     remainder = (length % self.maxSentLenght)
@@ -36,7 +36,7 @@ class MWTDatasetCreator:
       start_token = i * self.maxSentLenght
       end_token = start_token + self.maxSentLenght
       sentences.append({
-        'tokens':tokens[start_token:end_token],
+        'z_tokens':z_tokens[start_token:end_token],
         'sentence_id': sentence_id,
         'sentence_part_id': i,
         'sentence_part_count': (sentence_count if remainder == 0 else sentence_count+1)
@@ -46,7 +46,7 @@ class MWTDatasetCreator:
       start_token = i * self.maxSentLenght
       end_token = start_token + remainder
       sentences.append({
-        'tokens':tokens[start_token:end_token],
+        'z_tokens':z_tokens[start_token:end_token],
         'sentence_id': sentence_id,
         'sentence_part_id': i,
         'sentence_part_count': sentence_count+1
@@ -60,6 +60,7 @@ class MWTDatasetCreator:
       'labels': tf.FixedLenFeature((self.maxSentLenght,), tf.int64),
       'chars': tf.FixedLenFeature((self.maxSentLenght,self.maxWordLength), tf.int64),
       'char_lengths': tf.FixedLenFeature((self.maxSentLenght,), tf.int64),
+      'pos_tags': tf.FixedLenFeature((self.maxSentLenght,), tf.int64),
       'sentence_id': tf.FixedLenFeature((), tf.int64),
       'sentence_part_id': tf.FixedLenFeature((), tf.int64),
       'sentence_part_count': tf.FixedLenFeature((), tf.int64),
@@ -75,12 +76,15 @@ class MWTDatasetCreator:
     if not (self.cache_outfile and os.path.isfile(out_file) and os.path.isfile(out_file+'.len')):
       tokenized_sentences = []
       full_lengths = []
+      sum_full_lengths = 0
       for idx, sent in enumerate(self._get_sentences(files, prefix)):
-        tokens = self.tokenizer.substituteTokenize(sent)
-        full_lengths.append(len(tokens))
-        tokenized_sentences.extend(self._split_sentences(tokens,idx))
+        zipped = self.tokenizer.substituteTokenize_with_POS(sent)
+        full_lengths.append(len(zipped))
+        sum_full_lengths += len(zipped)
+        tokenized_sentences.extend(self._split_sentences(zipped,idx))
       full_lengths = np.array(full_lengths)
       print(prefix,"Finished tokenization")
+      print(prefix,"Token Count:", sum_full_lengths)
       print(prefix,"Sentence Count:", len(full_lengths))
       print(prefix,"Sentence Count (Split):", len(tokenized_sentences))
       print(prefix,"Sentence Length Mean:", np.mean(full_lengths, axis=0))
@@ -91,13 +95,19 @@ class MWTDatasetCreator:
     # write to outfile
       writer = tf.python_io.TFRecordWriter(out_file)
       for sent in tokenized_sentences:
-        token_vector, length, label_vector, char_vector, char_lengths = self.vectorizer.vectorize(sent['tokens'], self.maxSentLenght, self.maxWordLength)
+        t = tuple(zip(*sent['z_tokens'])) #unzip
+        features = {
+          'tokens':t[0],
+          'pos_tags':t[1]
+        }
+        vectors = self.vectorizer.vectorize(features, self.maxSentLenght, self.maxWordLength)
         feature = {
-          'tokens': tf.train.Feature(int64_list=tf.train.Int64List(value=token_vector.flatten())),
-          'length': tf.train.Feature(int64_list=tf.train.Int64List(value=length.flatten())),
-          'labels': tf.train.Feature(int64_list=tf.train.Int64List(value=label_vector.flatten())),
-          'chars': tf.train.Feature(int64_list=tf.train.Int64List(value=char_vector.flatten())),
-          'char_lengths': tf.train.Feature(int64_list=tf.train.Int64List(value=char_lengths.flatten())),
+          'tokens': tf.train.Feature(int64_list=tf.train.Int64List(value=vectors['token_vector'].flatten())),
+          'length': tf.train.Feature(int64_list=tf.train.Int64List(value=vectors['length'].flatten())),
+          'labels': tf.train.Feature(int64_list=tf.train.Int64List(value=vectors['label_vector'].flatten())),
+          'chars': tf.train.Feature(int64_list=tf.train.Int64List(value=vectors['char_vector'].flatten())),
+          'char_lengths': tf.train.Feature(int64_list=tf.train.Int64List(value=vectors['char_lengths'].flatten())),
+          'pos_tags': tf.train.Feature(int64_list=tf.train.Int64List(value=vectors['pos_tags'].flatten())),
           'sentence_id': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_id'],)).flatten())),
           'sentence_part_id': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_part_id'],)).flatten())),
           'sentence_part_count': tf.train.Feature(int64_list=tf.train.Int64List(value=np.array((sent['sentence_part_count'],)).flatten())),

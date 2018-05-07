@@ -9,7 +9,12 @@ class Tokenizer:
     Various functions for general text preprocessing and tokenization.
   """
   
-  def __init__(self, spacynlp=None):
+  def __init__(self, spacynlp=None, NLTK=False):
+    if NLTK:
+      import nltk
+      self.nltk = nltk
+      from nltk.stem import WordNetLemmatizer
+      self.wn = WordNetLemmatizer()
     if spacynlp == None:
       self.nlp = spacy.load('en_core_web_md')
       print("Spacy model 'en_core_web_md' loaded")
@@ -17,9 +22,6 @@ class Tokenizer:
       self.nlp = spacynlp
     self.alphabet = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ §'
     
-    self.POS_tags = {'ADJ','ADP','ADV','AUX','CONJ',
-    'CCONJ','DET','INTJ','NOUN','NUM','PART','PRON','PROPN','PUNCT',
-    'SCONJ','SYM','VERB','X','SPACE'}
     
     # char replacements
     self.RE_UNKNOWN = re.compile('[^'+re.escape(self.alphabet)+']')
@@ -83,9 +85,28 @@ class Tokenizer:
     # lemma to handle ending s
     # ending s is either noun plural or 3rd person singular verb
     # only take nouns
-    tags = [x.pos_ if x.pos_ in self.POS_tags else 'X' for x in doc]
+    POS_tags = Tokenizer.get_POS_tags()
+    tags = [x.pos_ if x.pos_ in POS_tags else 'X' for x in doc]
     tokens = [x.lemma_ if x.tag_ == "NNS" else x.text for x in doc]
     zipped = list(zip(tokens, tags))
+    if cleanseHyphens:
+      zipped = [(self.substituteHyphen(x[0]),x[1]) for x in zipped]
+    zipped = [(x[0].strip(),x[1]) for x in zipped if len(x[0].strip()) > 0]
+    #tokens, tags = tuple(zip(*zipped)) #unzip
+    return zipped
+  
+  def substituteTokenize_with_POS_NLTK(self, inputtext, cleanseHyphens=True):
+    text = self.substituteNewline(inputtext)
+    text = self.substituteUnknown(text)
+    text = self.substituteBrackets(text)
+    text = self.substituteNumbers(text)
+    text = text.lower()
+    # lemma to handle ending s
+    # ending s is either noun plural or 3rd person singular verb
+    # only take nouns
+    POS_tags = Tokenizer.get_POS_tags()
+    zipped = self.nltk.pos_tag(self.nltk.word_tokenize(text), tagset='universal')
+    zipped = [(self.wn.lemmatize(x[0]), x[1]) if x[1] == "NOUN" else (x[0], x[1]) for x in zipped]
     if cleanseHyphens:
       zipped = [(self.substituteHyphen(x[0]),x[1]) for x in zipped]
     zipped = [(x[0].strip(),x[1]) for x in zipped if len(x[0].strip()) > 0]
@@ -106,6 +127,13 @@ class Tokenizer:
       else:
         new_list.append('o')
     return "".join(new_list)
+  
+  @staticmethod
+  def get_POS_tags():
+    pos_ls = ['ADJ','ADP','ADV','AUX','CONJ',
+    'CCONJ','DET','INTJ','NOUN','NUM','PART','PRON','PROPN','PUNCT',
+    'SCONJ','SYM','VERB','X','SPACE']
+    return {pos_tag:idx for idx, pos_tag in enumerate(pos_ls)}
 
 class MWUAnnotator:
   """
@@ -238,17 +266,35 @@ class Vectorizer:
           gaz_data[0, token_id+i, gaz_id] = 1
     return gaz_vector
   
-  def vectorize(self, tokens, maxSentLength, maxWordLength):
+  def POS_vectorize(self, pos, maxSentLength):
+    # Returns the sentence as a POS vector
+    # Padding label ID = len(Tokenizer.get_POS_tags())
+    tags = Tokenizer.get_POS_tags()
+    pos_vector = np.full((1,maxSentLength), len(tags), dtype='int32')
+    for p_idx, pos_tag in enumerate(pos):
+      if p_idx >= maxSentLength:
+        break
+      pos_vector[0,p_idx] = tags[pos_tag]
+    return pos_vector
+  
+  def vectorize(self, features, maxSentLength, maxWordLength):
+    vectors = {}
+    tokens = features['tokens']
     token_vector = self.token_vectorize(tokens, maxSentLength)
+    vectors['token_vector'] = token_vector
+    vectors['length'] = np.array((len(tokens),))
     if self.annotator != None:
       label_vector = self.label_vectorize(tokens, maxSentLength)
-    else:
-      label_vector = None
+      vectors['label_vector'] = label_vector
+    if 'pos_tags' in features:
+      pos = features['pos_tags']
+      vectors['pos_tags'] = self.POS_vectorize(pos, maxSentLength)
     char_vector, char_lengths = self.character_vectorize(tokens, maxSentLength, maxWordLength)
+    vectors['char_vector'] = char_vector
+    vectors['char_lengths'] = char_lengths
     if self.gazetteers != None:
-      gazetteer_vector = gazetteer_vectorize(tokens, maxSentLength)
-      return token_vector, np.array((len(tokens),)), label_vector, char_vector, char_lengths, gazetteer_vector
-    return token_vector, np.array((len(tokens),)), label_vector, char_vector, char_lengths
+      vectors['gazetteer_vector'] = gazetteer_vectorize(tokens, maxSentLength)
+    return vectors
     
     
   

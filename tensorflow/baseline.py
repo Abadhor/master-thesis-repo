@@ -12,6 +12,8 @@ random.seed(5)
 text_dir = "D:/data/datasets/patent_mwt/plaintext/"
 mwt_file = "D:/data/datasets/patent_mwt/mwts/mwts.set"
 
+NLTK = True
+
 
 # selection of files used for training, validation and testing
 
@@ -34,7 +36,7 @@ with io.open(mwt_file, 'rb') as fp:
 
 # tokenizer and params
 
-tokenizer = Tokenizer()
+tokenizer = Tokenizer(NLTK=NLTK)
 
 # MWT preprocessing
 
@@ -99,7 +101,10 @@ def baseline(files, prefix, tokenizer):
   TP_count = 0
   FP_count = 0
   for idx, sent in enumerate(get_sentences(files, prefix, tokenizer)):
-    zipped = tokenizer.substituteTokenize_with_POS(sent)
+    if NLTK:
+      zipped = tokenizer.substituteTokenize_with_POS_NLTK(sent)
+    else:
+      zipped = tokenizer.substituteTokenize_with_POS(sent)
     tokens, pos = tuple(zip(*zipped)) #unzip
     labels = annotator.getLabels(tokens)
     GT_list = getMWTs(labels)
@@ -122,4 +127,5 @@ def baseline(files, prefix, tokenizer):
 baseline(train_files, "Train", tokenizer)
 baseline(val_files, "Validation", tokenizer)
 baseline(test_files, "Test", tokenizer)
+baseline(filenames, "All", tokenizer)
 

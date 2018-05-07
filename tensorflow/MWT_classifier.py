@@ -7,6 +7,7 @@ from Preprocessing import Tokenizer, MWUAnnotator, Vectorizer
 from MWTDatasetCreator import MWTDatasetCreator
 from TrainHelpers import TrainHelpers as hlp
 from EntityModel import EntityModel
+from TFLogger import TFLogger
 from gensim.models.word2vec import Word2Vec
 import argparse
 import options
@@ -34,23 +35,28 @@ args = parser.parse_args()
 # TODO:
 # parse file locations
 
+
+
 text_dir = "D:/data/datasets/patent_mwt/plaintext/"
 mwt_file = "D:/data/datasets/patent_mwt/mwts/mwts.set"
 LM_DICT = "vocab-2016-09-10.txt"
 LM_DATA = "embeddings_char_cnn.npy"
 
 TMP_MODEL = "./tmp/model.ckpt"
+LOG_DIR = "./log/"
 BEST_MODEL = "./models/best_model.session"
 DICTIONARY = "./models/dictionary"
 PARAMS = "./models/params"
 
-cache_tmp = True
+cache_tmp = False
 tmp_train = "./tmp/tmp_train.tfrecord"
 tmp_test = "./tmp/tmp_test.tfrecord"
 tmp_val = "./tmp/tmp_val.tfrecord"
 
 WORD2VEC = "D:/data/other/clefipnostem/300-1/skipgram.model"
+#WORD2VEC = "D:/data/other/wikipedia/300-2/skipgram.model"
 NEW_WORDS = ['.', ',', ';', '$', '(', ')', '§']
+
 
 # model parameters
 params = {}
@@ -63,22 +69,23 @@ params['boc_feature_size'] = 21
 params['charCNN_layer_depths'] = [32, 64, 128, 256, 256]
 params['char_dense_out_features'] = 50
 params['char_cnn_filter_width'] = 3
-params['char_cnn_out_features'] = 32
+#params['char_cnn_out_features'] = 32
 # gazetteers
 """
 params['gazetteer_count'] = 0
 params['gazetteers_dense_size'] = 50
 """
 params['num_classes'] = len(MWUAnnotator.LABEL_NAMES) + 1 # + padding label
+params['pos_depth'] = len(Tokenizer.get_POS_tags()) + 1 # + padding label
 """
 params['LM_embeddings'] = meta['char_CNN_vectors']
 params['LM_hidden_size'] = 512
 """
 
 # training parameters
-num_epochs = 600
+num_epochs = 200
 batch_size = 32
-early_stopping_epoch_limit = 60
+early_stopping_epoch_limit = 20
 performance_metric = 'F1'
 #performance_metric = 'recall'
 params['starter_learning_rate'] = 0.01
@@ -176,7 +183,7 @@ with io.open(PARAMS, 'w', encoding='utf-8') as fp:
   json.dump(params, fp)
 
 # train + evaluate
-with EntityModel(params, word_features='emb', char_features='boc', LM=None, gazetteers=False) as clf:
+with EntityModel(params, word_features='emb', char_features='boc', LM=None, gazetteers=False, pos_features='bow') as clf:
   clf.load_word_embeddings(word_embeddings)
   
   no_imp_ep_count = 0
@@ -186,6 +193,11 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
   best_epoch = 0
   epoch_times = []
   
+  log_fields = ['loss', 'accuracy', 'recall', 'precision', 'F1']
+  logger = TFLogger(log_fields, clf.getSession())
+  train_writer = logger.create_writer(LOG_DIR+'/train')
+  eval_writer = logger.create_writer(LOG_DIR+'/eval')
+  
   # For each epoch, train on the whole training set once
   # and validate on the validation set once
   for ep in range(0,num_epochs):
@@ -193,28 +205,31 @@ with EntityModel(params, word_features='emb', char_features='boc', LM=None, gaze
     epoch_start_time = time.time()
     clf.getSession().run(iterator_train.initializer)
     clf.getSession().run(iterator_val.initializer)
-    performance = hlp.runMWTDataset(next_train, num_samples_train, clf, 'train')
-    print("Train loss at Epoch", ep, ":", performance['loss'])
-    #print("Train label counts: ", performance['label_counts'])
-    print("Train accuracy: {:.3%}".format(performance['accuracy']))
-    #print("Train sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
-    #print("Train precision: {:.3%}".format(performance['precision']))
-    print("Train recall: {:.3%}".format(performance['recall']))
-    print("Train F1: {:.3%}".format(performance['F1']))
+    performance_training = hlp.runMWTDataset(next_train, num_samples_train, clf, 'train')
+    print("Train loss at Epoch", ep, ":", performance_training['loss'])
+    print("Train accuracy: {:.3%}".format(performance_training['accuracy']))
+    print("Train recall: {:.3%}".format(performance_training['recall']))
+    print("Train F1: {:.3%}".format(performance_training['F1']))
     print("                                                ", end='\r')
-    performance = hlp.runMWTDataset(next_val, num_samples_val, clf, 'eval')
-    print("Validation loss at Epoch", ep, ":", performance['loss'])
-    #print("Validation label counts: ", performance['label_counts'])
-    print("Validation accuracy: {:.3%}".format(performance['accuracy']))
-    print("Validation sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
-    print("Validation precision: {:.3%}".format(performance['precision']))
-    print("Validation recall: {:.3%}".format(performance['recall']))
-    print("Validation F1: {:.3%}".format(performance['F1']))
-    if performance[performance_metric] > best_performance:
+    performance_validation = hlp.runMWTDataset(next_val, num_samples_val, clf, 'eval')
+    print("Validation loss at Epoch", ep, ":", performance_validation['loss'])
+    #print("Validation label counts: ", performance_validation['label_counts'])
+    print("Validation accuracy: {:.3%}".format(performance_validation['accuracy']))
+    print("Validation sentence accuracy: {:.3%}".format(performance_validation['accuracy_sentence']))
+    print("Validation precision: {:.3%}".format(performance_validation['precision']))
+    print("Validation recall: {:.3%}".format(performance_validation['recall']))
+    print("Validation F1: {:.3%}".format(performance_validation['F1']))
+    
+    # logging
+    logger.log(train_writer, performance_training, ep)
+    logger.log(eval_writer, performance_validation, ep)
+    
+    # early stopping
+    if performance_validation[performance_metric] > best_performance:
       no_imp_ep_count = 0
-      best_accuracy = performance['accuracy']
-      best_sent_accuracy = performance['accuracy_sentence']
-      best_performance = performance[performance_metric]
+      best_accuracy = performance_validation['accuracy']
+      best_sent_accuracy = performance_validation['accuracy_sentence']
+      best_performance = performance_validation[performance_metric]
       best_epoch = ep
       save_path = clf.saveModel(TMP_MODEL)
       print("Model saved in file: %s" % save_path)

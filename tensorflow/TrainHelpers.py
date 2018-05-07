@@ -135,7 +135,8 @@ class TrainHelpers:
             'labels': labels,
             'sent_lengths': features['length'],
             'sentence_chars': features['chars'],
-            'word_lengths': features['char_lengths']
+            'word_lengths': features['char_lengths'],
+            'pos_tags':features['pos_tags']
           }
           # normalize performance based on batch length
           fetched = classifier.run(data, mode=mode)
