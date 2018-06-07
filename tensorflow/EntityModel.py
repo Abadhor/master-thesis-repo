@@ -13,10 +13,11 @@ class EntityModel:
                 self, 
                 params,
                 word_features='emb',
-                char_features='boc',
+                char_features='cnn',
                 LM='emb',
                 pos_features='bow',
-                gazetteers=True):
+                gazetteers=True,
+                hidden_dense_out=True):
     self.gazetteers = gazetteers
     self.pos_features = pos_features
     self.session = tf.Session()
@@ -94,7 +95,7 @@ class EntityModel:
       raise ValueError('LM='+LM)
     
     # char embeddings
-    if char_features=='boc':
+    if char_features=='cnn':
       char_embeddings = self.BOC(self.sentences_chars, params)
       # reshape mask for elementwise mult with broadcasting
       new_shape = [
@@ -105,18 +106,20 @@ class EntityModel:
       ]
       w_m_re = tf.reshape(self.word_len_mask, new_shape)
       masked_char_embeddings = tf.multiply(char_embeddings, w_m_re, name="mask_char_embeddings")
-    else:
-      raise ValueError('char_features='+char_features)
-    
-    # char CNN
-    #self.token_char_features = self.simpleCharCNN(masked_char_embeddings, params)
-    self.token_char_features = self.layeredCharCNN(masked_char_embeddings, params)
+      # char CNN
+      self.token_char_features = tf.nn.dropout(self.layeredCharCNN(masked_char_embeddings, params), 1)
     
     ################
     # 1st LSTM Layer
     ################
-    layer1_inputs = tf.concat([self.token_features, self.token_char_features],
-    axis=2, name="layer1_inputs")
+    layer1_inputs_list = [self.token_features]
+    
+    # char features
+    if char_features=='cnn':
+      layer1_inputs_list.append(self.token_char_features)
+    
+    
+    layer1_inputs = tf.concat(layer1_inputs_list, axis=2, name="layer1_inputs")
     
     layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1', keep_prob=self.dropout_05)
     
@@ -145,9 +148,9 @@ class EntityModel:
     
     layer3 = self.createBiDirectionalLSTMLayer(layer3_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l3', keep_prob=self.dropout_08)
     """
-    ###################
-    # final dense layer
-    ###################
+    ####################
+    # final dense layers
+    ####################
     final_dense_inputs_list = [layer2]
     
     if gazetteers:
@@ -169,13 +172,32 @@ class EntityModel:
     """
     final_dense_inputs = tf.concat(final_dense_inputs_list, axis=2, name="final_dense_inputs")
     
-    # pass the final state into this linear function to multiply it 
-    # by the weights and add bias to get our output.
+    # Dense Hidden Layers and linear output layer
     # Shape of class_scores is [batch_size, sent_length, num_classes]
-    #class_scores_rs_pre = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']+params['pos_depth']], name="class_scores_rs_pre")
-    class_scores_rs_pre = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']], name="class_scores_rs_pre")
-    #class_scores_linear = self.linearLayer(class_scores_rs_pre, 2*params['hidden_size']+params['gazetteers_dense_size']+params['pos_depth'], params['num_classes'], "output")
-    class_scores_linear = self.linearLayer(class_scores_rs_pre, 2*params['hidden_size']+params['gazetteers_dense_size'], params['num_classes'], "output")
+    final_dense_inputs_rs = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']], name="final_dense_inputs_rs")
+    final_dense_hidden = self.linearLayer(
+      final_dense_inputs_rs,
+      2*params['hidden_size']+params['gazetteers_dense_size'],
+      params['final_dense_hidden_depth'],
+      "final_dense_hidden")
+    final_dense_hidden = tf.nn.relu(final_dense_hidden)
+    final_dense_hidden = tf.nn.dropout(final_dense_hidden, self.dropout_08)
+    ##############
+    # output layer
+    ##############
+    if hidden_dense_out == True:
+      output_layer_input = final_dense_hidden
+      in_depth = params['final_dense_hidden_depth']
+    else:
+      output_layer_input = final_dense_inputs_rs
+      in_depth = 2*params['hidden_size']+params['gazetteers_dense_size']
+    
+    class_scores_linear = self.linearLayer(
+      output_layer_input, 
+      in_depth,
+      params['num_classes'],
+      "output")
+    #class_scores_linear = self.linearLayer(final_dense_inputs_rs, 2*params['hidden_size']+params['gazetteers_dense_size'], params['num_classes'], "output")
     class_scores = tf.reshape(class_scores_linear, [tf.shape(final_dense_inputs)[0],params['sent_length'], params['num_classes']], name="class_scores_rs2")
     
     ######################

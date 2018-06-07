@@ -52,7 +52,7 @@ def cleansetokenize(inputtext):
     return processed_tokens
 
 nlp = spacy.load('en_core_web_md')
-
+"""
 # MWT Extraction
 mwt_set_raw = set()
 fileList = os.listdir(args.gate_dir)
@@ -67,5 +67,22 @@ for mwt in mwt_set_raw:
   # lemma + remove whitespaces and empty tokens
   tokens = [x.lemma_.strip() for x in doc if len(x.lemma_.strip()) > 0]
   mwt_dict[" ".join(tokens)] = tokens
+with io.open(args.out_file, "wb") as fp:
+  pickle.dump(mwt_dict, fp)
+"""
+# MWT Extraction
+mwt_dict = {}
+fileList = os.listdir(args.gate_dir)
+for fname in fileList:
+  ls = extractMWTS(args.gate_dir+'/'+fname)
+  for item in ls:
+    text = item.strip().lower()
+    doc = nlp(text)
+    tokens = [x.lemma_.strip() for x in doc if len(x.lemma_.strip()) > 0]
+    mwt = " ".join(tokens)
+    if mwt in mwt_dict:
+      mwt_dict[mwt] += 1
+    else:
+      mwt_dict[mwt] = 1
 with io.open(args.out_file, "wb") as fp:
   pickle.dump(mwt_dict, fp)

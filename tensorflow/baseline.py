@@ -6,13 +6,13 @@ import os
 import io
 import pickle
 import random
-random.seed(5)
-
+#random.seed(5) # Split A
+random.seed(15) # Split B
 
 text_dir = "D:/data/datasets/patent_mwt/plaintext/"
-mwt_file = "D:/data/datasets/patent_mwt/mwts/mwts.set"
+mwt_file = "D:/data/datasets/patent_mwt/mwts/mwts.dict"
 
-NLTK = True
+NLTK = False
 
 
 # selection of files used for training, validation and testing
@@ -29,10 +29,10 @@ print(val_files)
 print("------------------------------Test Files-------------------------------")
 print(test_files)
 
-# load Multi Word Terms set from files
+# load Multi Word Terms dict from files
 
 with io.open(mwt_file, 'rb') as fp:
-  mwt_set = pickle.load(fp)
+  mwt_dict = pickle.load(fp)
 
 # tokenizer and params
 
@@ -41,7 +41,7 @@ tokenizer = Tokenizer(NLTK=NLTK)
 # MWT preprocessing
 
 mwt_tokens_list = []
-for mwt in mwt_set:
+for mwt in mwt_dict.keys():
   tokens = tokenizer.substituteTokenize(mwt)
   mwt_tokens_list.append(tokens)
 
@@ -120,6 +120,7 @@ def baseline(files, prefix, tokenizer):
         FP_count += 1
   FN_count = GT_count - TP_count
   precision, recall, F1 = TrainHelpers.getScores(TP_count, FP_count, FN_count)
+  print(prefix+"set GT count:",GT_count)
   print(prefix+"set precision: {:.3%}".format(precision))
   print(prefix+"set recall: {:.3%}".format(recall))
   print(prefix+"set F1: {:.3%}".format(F1))

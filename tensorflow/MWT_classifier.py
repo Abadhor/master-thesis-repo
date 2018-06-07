@@ -13,7 +13,8 @@ import argparse
 import options
 import time
 import random
-random.seed(5)
+random.seed(5) # Split A
+#random.seed(15) # Split B
 
 """
 parser = argparse.ArgumentParser()
@@ -60,6 +61,15 @@ NEW_WORDS = ['.', ',', ';', '$', '(', ')', '§']
 
 # model parameters
 params = {}
+# call params
+params['small_training_set'] = False
+
+params['char_feature_type'] = 'cnn'
+params['pos_features'] = None
+params['hidden_dense_out'] = True
+
+
+# depths
 params['sent_length'] = 75
 params['word_length'] = 32
 params['hidden_size'] = 350
@@ -67,9 +77,9 @@ params['boc_feature_size'] = 21
 # char CNN
 # 32->16, 16->8, 8->4, 4->2, 2->1
 params['charCNN_layer_depths'] = [32, 64, 128, 256, 256]
-params['char_dense_out_features'] = 50
+params['char_dense_out_features'] = 100
 params['char_cnn_filter_width'] = 3
-#params['char_cnn_out_features'] = 32
+params['final_dense_hidden_depth'] = 300
 # gazetteers
 """
 params['gazetteer_count'] = 0
@@ -101,6 +111,8 @@ sample = random.sample(filenames, 4)
 test_files = sample[:2]
 val_files = sample[2:]
 train_files = [fname for fname in filenames if fname not in sample]
+if params['small_training_set']:
+  train_files = train_files[:len(train_files)//2]
 print("------------------------------Train Files------------------------------")
 print(train_files)
 print("----------------------------Validation Files---------------------------")
@@ -183,7 +195,14 @@ with io.open(PARAMS, 'w', encoding='utf-8') as fp:
   json.dump(params, fp)
 
 # train + evaluate
-with EntityModel(params, word_features='emb', char_features='boc', LM=None, gazetteers=False, pos_features='bow') as clf:
+with EntityModel(params,
+                 word_features='emb',
+                 char_features=params['char_feature_type'],
+                 LM=None,
+                 gazetteers=False,
+                 pos_features=params['pos_features'],
+                 hidden_dense_out=params['hidden_dense_out']
+                 ) as clf:
   clf.load_word_embeddings(word_embeddings)
   
   no_imp_ep_count = 0
