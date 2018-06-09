@@ -1,0 +1,1 @@
+ python .\best_model_demo.py --model_dir "./logs/005_standard/" --out_dir "./logs/005_standard/demo_out/" --data_files "D:/data/datasets/patent_mwt/plaintext/11.txt" "D:/data/datasets/patent_mwt/plaintext/22.txt"

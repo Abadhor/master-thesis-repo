@@ -1,0 +1,1 @@
+ python .\best_model_demo.py --model_dir "./logs/015_CNN100_dropout_hidden/" --out_dir "./logs/015_CNN100_dropout_hidden/demo_out/" --mwt_file "D:/data/datasets/patent_mwt/mwts/mwts.set" --data_files "D:/data/datasets/patent_mwt/plaintext/17.txt" "D:/data/datasets/patent_mwt/plaintext/01.txt"

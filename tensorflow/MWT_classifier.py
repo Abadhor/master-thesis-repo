@@ -13,8 +13,8 @@ import argparse
 import options
 import time
 import random
-random.seed(5) # Split A
-#random.seed(15) # Split B
+#random.seed(5) # Split A
+random.seed(15) # Split B
 
 """
 parser = argparse.ArgumentParser()
@@ -65,7 +65,7 @@ params = {}
 params['small_training_set'] = False
 
 params['char_feature_type'] = 'cnn'
-params['pos_features'] = None
+params['pos_features'] = None#'bow'
 params['hidden_dense_out'] = True
 
 
@@ -77,7 +77,8 @@ params['boc_feature_size'] = 21
 # char CNN
 # 32->16, 16->8, 8->4, 4->2, 2->1
 params['charCNN_layer_depths'] = [32, 64, 128, 256, 256]
-params['char_dense_out_features'] = 100
+params['char_dense_out_features'] = 50
+params['char_dense_out_dropout'] = False
 params['char_cnn_filter_width'] = 3
 params['final_dense_hidden_depth'] = 300
 # gazetteers
@@ -96,8 +97,8 @@ params['LM_hidden_size'] = 512
 num_epochs = 200
 batch_size = 32
 early_stopping_epoch_limit = 20
-performance_metric = 'F1'
-#performance_metric = 'recall'
+#performance_metric = 'F1'
+performance_metric = 'recall'
 params['starter_learning_rate'] = 0.01
 params['l2-coefficient'] = 0.01
 params['grad_clip_norm'] = 5.0

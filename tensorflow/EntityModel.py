@@ -106,8 +106,12 @@ class EntityModel:
       ]
       w_m_re = tf.reshape(self.word_len_mask, new_shape)
       masked_char_embeddings = tf.multiply(char_embeddings, w_m_re, name="mask_char_embeddings")
+      if params['char_dense_out_dropout']:
+        cnn_dropout = self.dropout_05
+      else:
+        cnn_dropout = 1
       # char CNN
-      self.token_char_features = tf.nn.dropout(self.layeredCharCNN(masked_char_embeddings, params), 1)
+      self.token_char_features = tf.nn.dropout(self.layeredCharCNN(masked_char_embeddings, params), cnn_dropout)
     
     ################
     # 1st LSTM Layer
@@ -175,13 +179,14 @@ class EntityModel:
     # Dense Hidden Layers and linear output layer
     # Shape of class_scores is [batch_size, sent_length, num_classes]
     final_dense_inputs_rs = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']], name="final_dense_inputs_rs")
-    final_dense_hidden = self.linearLayer(
-      final_dense_inputs_rs,
-      2*params['hidden_size']+params['gazetteers_dense_size'],
-      params['final_dense_hidden_depth'],
-      "final_dense_hidden")
-    final_dense_hidden = tf.nn.relu(final_dense_hidden)
-    final_dense_hidden = tf.nn.dropout(final_dense_hidden, self.dropout_08)
+    if hidden_dense_out == True:
+      final_dense_hidden = self.linearLayer(
+        final_dense_inputs_rs,
+        2*params['hidden_size']+params['gazetteers_dense_size'],
+        params['final_dense_hidden_depth'],
+        "final_dense_hidden")
+      final_dense_hidden = tf.nn.relu(final_dense_hidden)
+      final_dense_hidden = tf.nn.dropout(final_dense_hidden, self.dropout_08)
     ##############
     # output layer
     ##############
