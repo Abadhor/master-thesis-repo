@@ -13,8 +13,8 @@ import argparse
 import options
 import time
 import random
-#random.seed(5) # Split A
-random.seed(15) # Split B
+random.seed(5) # Split A: Val=[11,22],Test=[08,21]
+#random.seed(15) # Split B: Val=[17,01],Test=[00,06]
 
 """
 parser = argparse.ArgumentParser()
@@ -66,8 +66,10 @@ params['small_training_set'] = False
 
 params['char_feature_type'] = 'cnn'
 params['pos_features'] = None#'bow'
-params['hidden_dense_out'] = True
-
+params['hidden_dense_out'] = False
+params['lstm_dropout'] = True
+#params['lstm_sizes'] = None
+#params['lstm_sizes'] = [350, 100]
 
 # depths
 params['sent_length'] = 75
@@ -97,8 +99,8 @@ params['LM_hidden_size'] = 512
 num_epochs = 200
 batch_size = 32
 early_stopping_epoch_limit = 20
-#performance_metric = 'F1'
-performance_metric = 'recall'
+performance_metric = ['F1']
+#performance_metric = ['F1','recall']
 params['starter_learning_rate'] = 0.01
 params['l2-coefficient'] = 0.01
 params['grad_clip_norm'] = 5.0
@@ -208,7 +210,8 @@ with EntityModel(params,
   
   no_imp_ep_count = 0
   best_accuracy = 0
-  best_performance = 0
+  #best_performance = 0
+  best_performance = {m: 0 for m in performance_metric}
   best_sent_accuracy = 0
   best_epoch = 0
   epoch_times = []
@@ -245,11 +248,13 @@ with EntityModel(params,
     logger.log(eval_writer, performance_validation, ep)
     
     # early stopping
-    if performance_validation[performance_metric] > best_performance:
+    if any([performance_validation[m] > best_performance[m] for m in performance_metric]):
       no_imp_ep_count = 0
       best_accuracy = performance_validation['accuracy']
       best_sent_accuracy = performance_validation['accuracy_sentence']
-      best_performance = performance_validation[performance_metric]
+      for m in performance_metric:
+        if performance_validation[m] > best_performance[m]:
+          best_performance[m] = performance_validation[m]
       best_epoch = ep
       save_path = clf.saveModel(TMP_MODEL)
       print("Model saved in file: %s" % save_path)
@@ -265,7 +270,8 @@ with EntityModel(params,
   print("Best Epoch:", best_epoch)
   print("Best accuracy: {:.3%}".format(best_accuracy))
   print("Best sentence accuracy: {:.3%}".format(best_sent_accuracy))
-  print("Best "+performance_metric+": {:.3%}".format(best_performance))
+  for m in performance_metric:
+    print("Best "+m+": {:.3%}".format(best_performance[m]))
   
   # validation on test set
   print("Validating on test set...")

@@ -116,6 +116,18 @@ class EntityModel:
     ################
     # 1st LSTM Layer
     ################
+    # dropout
+    if params['lstm_dropout']:
+      lstm_dropout = self.dropout_05
+    else:
+      lstm_dropout = 1
+    
+    # size
+    if 'lstm_sizes' in params:
+      lstm_size = params['lstm_sizes'][0]
+    else:
+      lstm_size = params['hidden_size']
+    
     layer1_inputs_list = [self.token_features]
     
     # char features
@@ -125,11 +137,18 @@ class EntityModel:
     
     layer1_inputs = tf.concat(layer1_inputs_list, axis=2, name="layer1_inputs")
     
-    layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l1', keep_prob=self.dropout_05)
+    layer1 = self.createBiDirectionalLSTMLayer(layer1_inputs, lstm_size, self.sent_lengths, 'LSTM_l1', keep_prob=lstm_dropout)
     
     ################
     # 2nd LSTM layer
     ################
+    
+    # size
+    if 'lstm_sizes' in params:
+      lstm_size = params['lstm_sizes'][1]
+    else:
+      lstm_size = params['hidden_size']
+    
     layer2_inputs_list = [layer1]
     
     # add LM to layer 1 output
@@ -141,7 +160,7 @@ class EntityModel:
     
     layer2_inputs = tf.concat(layer2_inputs_list, axis=2, name="layer2_inputs")
     
-    layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, params['hidden_size'], self.sent_lengths, 'LSTM_l2', keep_prob=self.dropout_05)
+    layer2 = self.createBiDirectionalLSTMLayer(layer2_inputs, lstm_size, self.sent_lengths, 'LSTM_l2', keep_prob=lstm_dropout)
     
     #############################
     # experimental 3rd LSTM layer
@@ -178,11 +197,11 @@ class EntityModel:
     
     # Dense Hidden Layers and linear output layer
     # Shape of class_scores is [batch_size, sent_length, num_classes]
-    final_dense_inputs_rs = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*params['hidden_size']+params['gazetteers_dense_size']], name="final_dense_inputs_rs")
+    final_dense_inputs_rs = tf.reshape(final_dense_inputs, [tf.shape(final_dense_inputs)[0]*params['sent_length'], 2*lstm_size+params['gazetteers_dense_size']], name="final_dense_inputs_rs")
     if hidden_dense_out == True:
       final_dense_hidden = self.linearLayer(
         final_dense_inputs_rs,
-        2*params['hidden_size']+params['gazetteers_dense_size'],
+        2*lstm_size+params['gazetteers_dense_size'],
         params['final_dense_hidden_depth'],
         "final_dense_hidden")
       final_dense_hidden = tf.nn.relu(final_dense_hidden)
@@ -195,7 +214,7 @@ class EntityModel:
       in_depth = params['final_dense_hidden_depth']
     else:
       output_layer_input = final_dense_inputs_rs
-      in_depth = 2*params['hidden_size']+params['gazetteers_dense_size']
+      in_depth = 2*lstm_size+params['gazetteers_dense_size']
     
     class_scores_linear = self.linearLayer(
       output_layer_input, 

@@ -12,7 +12,8 @@ random.seed(15) # Split B
 text_dir = "D:/data/datasets/patent_mwt/plaintext/"
 mwt_file = "D:/data/datasets/patent_mwt/mwts/mwts.dict"
 
-NLTK = False
+NLTK = True
+prepositions = True
 
 
 # selection of files used for training, validation and testing
@@ -83,8 +84,11 @@ def getMWTs_POS(pos, tokenizer):
   # 1. (Adj|Noun)+ Noun
   # 2. ((<ADJ|NOUN>+<ADP>)+<ADJ|NOUN>*)<NOUN>
   char = tokenizer.POS2Char(pos) # convert pos to chars a,n,p,o
-  p = re.compile('(a|n)+n')
-  #p2 = re.compile('((a|n)+p)+(a|n)*n')
+  if prepositions:
+    #p = re.compile('((a|n)+p)+(a|n)*n')
+    p = re.compile('((a|n)+|((a|n)*(np)?)(a|n)*)n')
+  else:
+    p = re.compile('(a|n)+n')
   MWTs = set()
   for i in re.finditer(p, char):
     span = i.span()

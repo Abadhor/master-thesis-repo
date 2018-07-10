@@ -116,7 +116,7 @@ def process_text(text, out_file=None):
       if out_file != None:
         out_file.write(str(p_list)+'\n')
       else:
-        print(features['tokens'][start:end])
+        print(str(p_list))
 
 
 # load dictionary from file
