@@ -324,6 +324,7 @@ class EntityModel:
   def __exit__(self, exception_type, exception_value, traceback):
     if exception_type is not None:
       print(exception_type, exception_value, traceback)
+    tf.reset_default_graph()
     self.closeSession()
   
   def run(self, data, mode='eval'):

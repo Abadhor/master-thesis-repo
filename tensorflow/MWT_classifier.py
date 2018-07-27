@@ -36,23 +36,29 @@ args = parser.parse_args()
 # TODO:
 # parse file locations
 
-
+CROSS_VALIDATION = True
+K = 11
 
 text_dir = "D:/data/datasets/patent_mwt/plaintext/"
 mwt_file = "D:/data/datasets/patent_mwt/mwts/mwts.set"
 LM_DICT = "vocab-2016-09-10.txt"
 LM_DATA = "embeddings_char_cnn.npy"
 
-TMP_MODEL = "./tmp/model.ckpt"
 LOG_DIR = "./log/"
 BEST_MODEL = "./models/best_model.session"
 DICTIONARY = "./models/dictionary"
 PARAMS = "./models/params"
 
 cache_tmp = False
-tmp_train = "./tmp/tmp_train.tfrecord"
-tmp_test = "./tmp/tmp_test.tfrecord"
-tmp_val = "./tmp/tmp_val.tfrecord"
+TMP_DIR = "./tmp/"
+TMP_MODEL = TMP_DIR+"model.ckpt"
+tmp_train = TMP_DIR+"tmp_train.tfrecord"
+tmp_test = TMP_DIR+"tmp_test.tfrecord"
+tmp_val = TMP_DIR+"tmp_val.tfrecord"
+
+if len(os.listdir(TMP_DIR)) != 0:
+  print("Temp Dir", TMP_DIR, "must be empty!")
+  exit()
 
 WORD2VEC = "D:/data/other/clefipnostem/300-1/skipgram.model"
 #WORD2VEC = "D:/data/other/wikipedia/300-2/skipgram.model"
@@ -107,21 +113,8 @@ params['grad_clip_norm'] = 5.0
 params['decay_steps'] = 200
 params['decay_rate'] = 0.96
 
-
 # selection of files used for training, validation and testing
 filenames = [text_dir + fname for fname in os.listdir(text_dir)]
-sample = random.sample(filenames, 4)
-test_files = sample[:2]
-val_files = sample[2:]
-train_files = [fname for fname in filenames if fname not in sample]
-if params['small_training_set']:
-  train_files = train_files[:len(train_files)//2]
-print("------------------------------Train Files------------------------------")
-print(train_files)
-print("----------------------------Validation Files---------------------------")
-print(val_files)
-print("------------------------------Test Files-------------------------------")
-print(test_files)
 
 # load Multi Word Terms set from files
 with io.open(mwt_file, 'rb') as fp:
@@ -177,125 +170,173 @@ params['no_vector_count'] = len(vectorizer.inverseDictionary) - model.wv.syn0.sh
 
 # create datasets and dataset iterators
 creator = MWTDatasetCreator(tokenizer, vectorizer, params['sent_length'], params['word_length'], cache_tmp)
-# train
-dataset_train, num_samples_train = creator.createDataset(train_files, tmp_train, "Train:")
-dataset_train = dataset_train.cache(tmp_train+".cache").shuffle(num_samples_train).batch(batch_size)
-iterator_train = dataset_train.make_initializable_iterator()
-next_train = iterator_train.get_next()
-# test
-dataset_test, num_samples_test = creator.createDataset(test_files, tmp_test, "Test:")
-dataset_test = dataset_test.batch(batch_size)
-iterator_test = dataset_test.make_initializable_iterator()
-next_test = iterator_test.get_next()
-# development/validation
-dataset_val, num_samples_val = creator.createDataset(val_files, tmp_val, "Val:")
-dataset_val = dataset_val.batch(batch_size)
-iterator_val = dataset_val.make_initializable_iterator()
-next_val = iterator_val.get_next()
 
-# save model params to file
-with io.open(PARAMS, 'w', encoding='utf-8') as fp:
-  json.dump(params, fp)
-
-# train + evaluate
-with EntityModel(params,
-                 word_features='emb',
-                 char_features=params['char_feature_type'],
-                 LM=None,
-                 gazetteers=False,
-                 pos_features=params['pos_features'],
-                 hidden_dense_out=params['hidden_dense_out']
-                 ) as clf:
-  clf.load_word_embeddings(word_embeddings)
+def main(train_files, test_files, val_files):
+  # train
+  dataset_train, num_samples_train = creator.createDataset(train_files, tmp_train, "Train:")
+  dataset_train = dataset_train.cache(tmp_train+".cache").shuffle(num_samples_train).batch(batch_size)
+  iterator_train = dataset_train.make_initializable_iterator()
+  next_train = iterator_train.get_next()
+  # test
+  dataset_test, num_samples_test = creator.createDataset(test_files, tmp_test, "Test:")
+  dataset_test = dataset_test.batch(batch_size)
+  iterator_test = dataset_test.make_initializable_iterator()
+  next_test = iterator_test.get_next()
+  # development/validation
+  dataset_val, num_samples_val = creator.createDataset(val_files, tmp_val, "Val:")
+  dataset_val = dataset_val.batch(batch_size)
+  iterator_val = dataset_val.make_initializable_iterator()
+  next_val = iterator_val.get_next()
   
-  no_imp_ep_count = 0
-  best_accuracy = 0
-  #best_performance = 0
-  best_performance = {m: 0 for m in performance_metric}
-  best_sent_accuracy = 0
-  best_epoch = 0
-  epoch_times = []
+  # save model params to file
+  with io.open(PARAMS, 'w', encoding='utf-8') as fp:
+    json.dump(params, fp)
   
-  log_fields = ['loss', 'accuracy', 'recall', 'precision', 'F1']
-  logger = TFLogger(log_fields, clf.getSession())
-  train_writer = logger.create_writer(LOG_DIR+'/train')
-  eval_writer = logger.create_writer(LOG_DIR+'/eval')
-  
-  # For each epoch, train on the whole training set once
-  # and validate on the validation set once
-  for ep in range(0,num_epochs):
-    print("Epoch", ep, "training...")
-    epoch_start_time = time.time()
-    clf.getSession().run(iterator_train.initializer)
-    clf.getSession().run(iterator_val.initializer)
-    performance_training = hlp.runMWTDataset(next_train, num_samples_train, clf, 'train')
-    print("Train loss at Epoch", ep, ":", performance_training['loss'])
-    print("Train accuracy: {:.3%}".format(performance_training['accuracy']))
-    print("Train recall: {:.3%}".format(performance_training['recall']))
-    print("Train F1: {:.3%}".format(performance_training['F1']))
+  # train + evaluate
+  with EntityModel(params,
+                   word_features='emb',
+                   char_features=params['char_feature_type'],
+                   LM=None,
+                   gazetteers=False,
+                   pos_features=params['pos_features'],
+                   hidden_dense_out=params['hidden_dense_out']
+                   ) as clf:
+    clf.load_word_embeddings(word_embeddings)
+    no_imp_ep_count = 0
+    best_accuracy = 0
+    #best_performance = 0
+    best_performance = {m: 0 for m in performance_metric}
+    best_sent_accuracy = 0
+    best_epoch = 0
+    epoch_times = []
+    
+    log_fields = ['loss', 'accuracy', 'recall', 'precision', 'F1']
+    logger = TFLogger(log_fields, clf.getSession())
+    train_writer = logger.create_writer(LOG_DIR+'/train')
+    eval_writer = logger.create_writer(LOG_DIR+'/eval')
+    
+    # For each epoch, train on the whole training set once
+    # and validate on the validation set once
+    for ep in range(0,num_epochs):
+      print("Epoch", ep, "training...")
+      epoch_start_time = time.time()
+      clf.getSession().run(iterator_train.initializer)
+      clf.getSession().run(iterator_val.initializer)
+      performance_training = hlp.runMWTDataset(next_train, num_samples_train, clf, 'train')
+      print("Train loss at Epoch", ep, ":", performance_training['loss'])
+      print("Train accuracy: {:.3%}".format(performance_training['accuracy']))
+      print("Train recall: {:.3%}".format(performance_training['recall']))
+      print("Train F1: {:.3%}".format(performance_training['F1']))
+      print("                                                ", end='\r')
+      performance_validation = hlp.runMWTDataset(next_val, num_samples_val, clf, 'eval')
+      print("Validation loss at Epoch", ep, ":", performance_validation['loss'])
+      #print("Validation label counts: ", performance_validation['label_counts'])
+      print("Validation accuracy: {:.3%}".format(performance_validation['accuracy']))
+      print("Validation sentence accuracy: {:.3%}".format(performance_validation['accuracy_sentence']))
+      print("Validation precision: {:.3%}".format(performance_validation['precision']))
+      print("Validation recall: {:.3%}".format(performance_validation['recall']))
+      print("Validation F1: {:.3%}".format(performance_validation['F1']))
+      
+      # logging
+      logger.log(train_writer, performance_training, ep)
+      logger.log(eval_writer, performance_validation, ep)
+      
+      # early stopping
+      if any([performance_validation[m] > best_performance[m] for m in performance_metric]):
+        no_imp_ep_count = 0
+        best_accuracy = performance_validation['accuracy']
+        best_sent_accuracy = performance_validation['accuracy_sentence']
+        for m in performance_metric:
+          if performance_validation[m] > best_performance[m]:
+            best_performance[m] = performance_validation[m]
+        best_epoch = ep
+        save_path = clf.saveModel(TMP_MODEL)
+        print("Model saved in file: %s" % save_path)
+      else:
+        no_imp_ep_count += 1
+        if no_imp_ep_count == early_stopping_epoch_limit:
+          break
+      epoch_time = time.time() - epoch_start_time
+      epoch_times.append(epoch_time)
+      print("Epoch duration:", epoch_time)
+      sys.stdout.flush()
     print("                                                ", end='\r')
-    performance_validation = hlp.runMWTDataset(next_val, num_samples_val, clf, 'eval')
-    print("Validation loss at Epoch", ep, ":", performance_validation['loss'])
-    #print("Validation label counts: ", performance_validation['label_counts'])
-    print("Validation accuracy: {:.3%}".format(performance_validation['accuracy']))
-    print("Validation sentence accuracy: {:.3%}".format(performance_validation['accuracy_sentence']))
-    print("Validation precision: {:.3%}".format(performance_validation['precision']))
-    print("Validation recall: {:.3%}".format(performance_validation['recall']))
-    print("Validation F1: {:.3%}".format(performance_validation['F1']))
+    print("Best Epoch:", best_epoch)
+    print("Best accuracy: {:.3%}".format(best_accuracy))
+    print("Best sentence accuracy: {:.3%}".format(best_sent_accuracy))
+    for m in performance_metric:
+      print("Best "+m+": {:.3%}".format(best_performance[m]))
     
-    # logging
-    logger.log(train_writer, performance_training, ep)
-    logger.log(eval_writer, performance_validation, ep)
+    # validation on test set
+    print("Validating on test set...")
+    clf.restoreModel(TMP_MODEL)
+    print("Model restored.")
+    clf.getSession().run(iterator_test.initializer)
+    performance = hlp.runMWTDataset(next_test, num_samples_test, clf, 'eval')
+    print("Testset loss at Epoch", best_epoch, ":", performance['loss'])
+    print("Testset label counts: ", performance['label_counts'])
+    print("Testset accuracy: {:.3%}".format(performance['accuracy']))
+    print("Testset sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
+    print("Testset precision: {:.3%}".format(performance['precision']))
+    print("Testset recall: {:.3%}".format(performance['recall']))
+    print("Testset F1: {:.3%}".format(performance['F1']))
     
-    # early stopping
-    if any([performance_validation[m] > best_performance[m] for m in performance_metric]):
-      no_imp_ep_count = 0
-      best_accuracy = performance_validation['accuracy']
-      best_sent_accuracy = performance_validation['accuracy_sentence']
-      for m in performance_metric:
-        if performance_validation[m] > best_performance[m]:
-          best_performance[m] = performance_validation[m]
-      best_epoch = ep
-      save_path = clf.saveModel(TMP_MODEL)
-      print("Model saved in file: %s" % save_path)
-    else:
-      no_imp_ep_count += 1
-      if no_imp_ep_count == early_stopping_epoch_limit:
-        break
-    epoch_time = time.time() - epoch_start_time
-    epoch_times.append(epoch_time)
-    print("Epoch duration:", epoch_time)
-    sys.stdout.flush()
-  print("                                                ", end='\r')
-  print("Best Epoch:", best_epoch)
-  print("Best accuracy: {:.3%}".format(best_accuracy))
-  print("Best sentence accuracy: {:.3%}".format(best_sent_accuracy))
-  for m in performance_metric:
-    print("Best "+m+": {:.3%}".format(best_performance[m]))
+    save_path = clf.saveModel(BEST_MODEL)
+    print("Best Model saved in file: %s" % save_path)
   
-  # validation on test set
-  print("Validating on test set...")
-  clf.restoreModel(TMP_MODEL)
-  print("Model restored.")
-  clf.getSession().run(iterator_test.initializer)
-  performance = hlp.runMWTDataset(next_test, num_samples_test, clf, 'eval')
-  print("Testset loss at Epoch", best_epoch, ":", performance['loss'])
-  print("Testset label counts: ", performance['label_counts'])
-  print("Testset accuracy: {:.3%}".format(performance['accuracy']))
-  print("Testset sentence accuracy: {:.3%}".format(performance['accuracy_sentence']))
-  print("Testset precision: {:.3%}".format(performance['precision']))
-  print("Testset recall: {:.3%}".format(performance['recall']))
-  print("Testset F1: {:.3%}".format(performance['F1']))
+  # clean-up
+  for f in os.listdir(TMP_DIR):
+    os.remove(TMP_DIR+f)
+  return performance
+
+if CROSS_VALIDATION:
+  random.shuffle(filenames)
+  stride = len(filenames) // K
+  ls_precision = []
+  ls_recall = []
+  ls_f1 = []
+  for i in range(K):
+    print('############################')
+    print('######## Fold', i, 'of',K)
+    print('############################')
+    train_files = []
+    val_files = []
+    test_files = []
+    for j in range(stride):
+      test_files.append(filenames[i*stride+j-len(filenames)])
+    for j in range(stride):
+      val_files.append(filenames[i*stride+j+stride-len(filenames)])
+    for j in range(len(filenames)-2*stride):
+      train_files.append(filenames[i*stride+j+2*stride-len(filenames)])
+    print("----------------------------Validation Files---------------------------")
+    print(val_files)
+    print("------------------------------Test Files-------------------------------")
+    print(test_files)
+    performance = main(train_files, test_files, val_files)
+    ls_precision.append(performance['precision'])
+    ls_recall.append(performance['recall'])
+    ls_f1.append(performance['F1'])
+  print("AVG Testset precision: {:.3%}".format(
+    sum(ls_precision)/len(ls_precision)
+  ))
+  print("AVG Testset recall: {:.3%}".format(
+    sum(ls_recall)/len(ls_recall)
+  ))
+  print("AVG Testset F1: {:.3%}".format(
+    sum(ls_f1)/len(ls_f1)
+  ))
+else:
+  sample = random.sample(filenames, 4)
+  test_files = sample[:2]
+  val_files = sample[2:]
+  train_files = [fname for fname in filenames if fname not in sample]
+  if params['small_training_set']:
+    train_files = train_files[:len(train_files)//2]
+  print("------------------------------Train Files------------------------------")
+  print(train_files)
+  print("----------------------------Validation Files---------------------------")
+  print(val_files)
+  print("------------------------------Test Files-------------------------------")
+  print(test_files)
+  main(train_files, test_files, val_files)
   
-  save_path = clf.saveModel(BEST_MODEL)
-  print("Best Model saved in file: %s" % save_path)
-
-# clean-up
-if not cache_tmp:
-  creator.deleteOutfiles(tmp_train)
-  creator.deleteOutfiles(tmp_test)
-  creator.deleteOutfiles(tmp_val)
-
-
-
-
