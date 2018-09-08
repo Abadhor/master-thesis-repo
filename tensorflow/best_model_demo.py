@@ -72,12 +72,14 @@ def _split_sentences(z_tokens, sentence_id):
 
 def process_text(text, out_file=None):
   sentences = tokenizer.splitSentences(text)
+  token_count = 0
   if out_file == None:
     print("Recognized", len(sentences), "sentences")
   for idx, sentence in enumerate(sentences):
     if out_file == None:
       print("Sentence", idx+1)
     zipped = tokenizer.substituteTokenize_with_POS(sentence)
+    token_count += len(zipped)
     tokenized_sentences = _split_sentences(zipped, idx)
     for sent in tokenized_sentences:
       #print("Max size sentence:",sent)
@@ -103,20 +105,21 @@ def process_text(text, out_file=None):
       if args.mwt_file != None:
         GT_list = hlp.getMWTs(vectors['label_vector'][0])
       if out_file != None:
-        out_file.write(str(features['tokens'][:params['sent_length']]) + '\n')
+        out_file.write(json.dumps(features['tokens'][:params['sent_length']]) + '\n')
       else:
         print(features['tokens'][:params['sent_length']])
       if args.mwt_file != None: 
         GT_list = [features['tokens'][start:end+1] for start, end in GT_list]
         if out_file != None:
-          out_file.write(str(GT_list).upper()+'\n')
+          out_file.write(json.dumps(GT_list).upper()+'\n')
         else:
           print(features['tokens'][start:end])
       p_list = [features['tokens'][start:end+1] for start, end in predictions]
       if out_file != None:
-        out_file.write(str(p_list)+'\n')
+        out_file.write(json.dumps(p_list)+'\n')
       else:
-        print(str(p_list))
+        print(json.dumps(p_list))
+  return token_count
 
 
 # load dictionary from file
@@ -177,12 +180,17 @@ with EntityModel(params,
       # read data and process
       dataset = tf.data.TextLineDataset([f])
       get_next = dataset.make_one_shot_iterator().get_next()
+      sent_count = 0
+      token_count = 0
       while True:
         try:
           text = clf.getSession().run(get_next).decode('utf-8')
-          process_text(text, out_file=out_file)
+          token_count += process_text(text, out_file=out_file)
+          sent_count += 1
         except tf.errors.OutOfRangeError:
           print("Finished processing file", f)
+          print("Sentence count:", sent_count)
+          print("AVG token count:",token_count/sent_count)
           break
       # close
       if out_file != None:

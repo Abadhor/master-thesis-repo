@@ -78,7 +78,9 @@ for fname in fileList:
   for item in ls:
     text = item.strip().lower()
     doc = nlp(text)
-    tokens = [x.lemma_.strip() for x in doc if len(x.lemma_.strip()) > 0]
+    tokens = [x.lemma_ if x.tag_ == "NNS" else x.text for x in doc]
+    tokens = [x.strip() for x in tokens if len(x.strip()) > 0]
+    #tokens = [x.lemma_.strip() for x in doc if len(x.lemma_.strip()) > 0]
     mwt = " ".join(tokens)
     if mwt in mwt_dict:
       mwt_dict[mwt] += 1

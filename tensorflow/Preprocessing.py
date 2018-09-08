@@ -17,6 +17,9 @@ class Tokenizer:
       self.wn = WordNetLemmatizer()
     if spacynlp == None:
       self.nlp = spacy.load('en_core_web_md')
+      for word in self.nlp.Defaults.stop_words:
+        lex = self.nlp.vocab[word]
+        lex.is_stop = True
       print("Spacy model 'en_core_web_md' loaded")
     else:
       self.nlp = spacynlp
